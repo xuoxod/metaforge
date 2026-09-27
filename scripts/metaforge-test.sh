@@ -27,6 +27,7 @@ TEST SUITE SELECTION:
   --parsers         Test metaforge-parsers crate only
   --forensics       Test metaforge-forensics crate only
   --sanitize        Test metaforge-sanitize crate only
+  --converter       Test metaforge-converter crate only
   --cli             Test metaforge-cli crate only
 
 OPTIONS:
@@ -52,7 +53,7 @@ VERBOSE=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --all|--adversarial|--unit|--core|--parsers|--forensics|--sanitize|--cli)
+        --all|--adversarial|--unit|--core|--parsers|--forensics|--sanitize|--converter|--cli)
             MODE="${1#--}"
             shift
             ;;
@@ -148,7 +149,7 @@ case "$MODE" in
             FAILED=$(( FAILED + 1 ))
         fi
         ;;
-    core|parsers|forensics|sanitize|cli)
+    core|parsers|forensics|sanitize|converter|cli)
         pkg="metaforge-$MODE"
         [ "$MODE" = "cli" ] && pkg="metaforge"
         ui_info "Executing crate test suite: $pkg..."

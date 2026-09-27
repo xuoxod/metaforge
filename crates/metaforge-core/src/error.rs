@@ -43,6 +43,15 @@ pub enum MetaForgeError {
     #[error("Security invariant violation: {detail}")]
     SecurityViolation { detail: String },
 
+    #[error("Conversion error: {detail}")]
+    ConversionError { detail: String },
+
+    #[error("Unsupported media format: {format}")]
+    UnsupportedFormat { format: String },
+
+    #[error("Allocation bomb detected: dimensions {width}x{height} exceed safety limits")]
+    DimensionAllocationBomb { width: u32, height: u32 },
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }

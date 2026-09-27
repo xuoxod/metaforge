@@ -5,6 +5,7 @@ members = [
     "crates/metaforge-parsers",
     "crates/metaforge-forensics",
     "crates/metaforge-sanitize",
+    "crates/metaforge-converter",
     "crates/metaforge-cli",
 ]
 default-members = ["crates/metaforge-cli"]

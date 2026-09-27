@@ -1,6 +1,6 @@
 # 📖 MetaForge User Guide
 
-Welcome to the user guide for `metaforge`—an enterprise-grade binary forensics, metadata inspection, and privacy sanitization engine for digital image containers. This manual details real-world usage instructions, forensic evaluation tables, and threat mitigation workflows.
+Welcome to the user guide for `metaforge`—an enterprise-grade binary forensics, metadata inspection, media transcoding, and privacy sanitization engine for digital image and audio containers. This manual details real-world usage instructions, forensic evaluation tables, and threat mitigation workflows.
 
 ---
 
@@ -16,7 +16,30 @@ metaforge test_images/img6-gps.jpg
 
 ## 🚀 2. Operational Scenarios
 
-### Scenario A: Forensics & Steganography Audit
+### Scenario A: Media Stream Probing
+Inspect audio/image properties without decoding the entire bitstream:
+
+```bash
+metaforge probe test_images/img6-gps.jpg
+metaforge probe recording.wav
+```
+
+---
+
+### Scenario B: Media & Image Transcoding
+Convert images between JPEG, PNG, WebP, GIF, BMP, and TIFF, or transcode WAV audio:
+
+```bash
+# Convert photo to WebP with custom dimensions and quality:
+metaforge convert original.png web_ready.webp --resize 1280x720 --quality 85
+
+# Convert stereo audio recording to mono at 44.1 kHz:
+metaforge convert voice_stereo.wav voice_mono.wav --channels 1 --rate 44100
+```
+
+---
+
+### Scenario C: Forensics & Steganography Audit
 Audit an image for post-EOF overlays, hidden ZIP/executable payloads, or high-entropy encrypted steganography:
 
 ```bash
@@ -34,7 +57,7 @@ metaforge audit test_images/img6-gps.jpg
 
 ---
 
-### Scenario B: Deep Privacy Sanitization
+### Scenario D: Deep Privacy Sanitization
 Strip sensitive geolocation tags, camera serials, timestamps, and private metadata blocks prior to publishing an asset:
 
 ```bash
@@ -48,7 +71,7 @@ metaforge sanitize test_images/img6-gps.jpg --overlay-only -o no_overlay.jpg
 
 ---
 
-### Scenario C: Reading & Editing Image Comments
+### Scenario E: Reading & Editing Image Comments
 Read or modify embedded JPEG comments or PNG textual tags without recompressing the image:
 
 ```bash
@@ -64,7 +87,7 @@ metaforge comment archived.jpg -d -o stripped.jpg
 
 ---
 
-### Scenario D: Exporting for Data Pipelines & SIEM
+### Scenario F: Exporting for Data Pipelines & SIEM
 Export structured metadata in JSON, JSONL, or formula-injection protected CSV:
 
 ```bash
@@ -80,14 +103,9 @@ metaforge -f csv test_images/img6-gps.jpg > report.csv
 
 ---
 
-### Scenario E: Low-Level Structure Dump
+### Scenario G: Low-Level Structure Dump
 Dump raw container markers, segment offsets, and lengths for binary inspection:
 
 ```bash
 metaforge dump test_images/img6-gps.jpg
-```
-
-With verbose byte previews:
-```bash
-metaforge dump -v test_images/img6-gps.jpg
 ```

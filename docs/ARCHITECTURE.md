@@ -4,15 +4,16 @@ This document details the modular layout, parsing flowcharts, data structures, a
 
 ---
 
-## 🎨 1. Modular Core (Decoupled 5-Crate Workspace)
+## 🎨 1. Modular Core (Decoupled 6-Crate Workspace)
 
-The codebase strictly enforces the **One-Job-Principle (OJP)** across five independent crates:
+The codebase strictly enforces the **One-Job-Principle (OJP)** across six independent crates:
 
 1.  **`metaforge-core`**: Foundational domain types (`MetadataEntry`, `ContainerType`), comprehensive 200+ EXIF/TIFF/GPS tag registry, WGS84 GPS coordinate calculations, and strongly typed `MetaForgeError` definitions. Zero parsing logic.
 2.  **`metaforge-parsers`**: Zero-copy binary container scanners for JPEG (SOF/SOS/APP markers), PNG (chunk walkers), WebP (RIFF/VP8X), GIF (descriptor blocks), and HEIC (ISOBMFF box hierarchies). Zero terminal or formatting logic.
 3.  **`metaforge-forensics`**: Forensics analysis engine calculating Shannon entropy ($0.0$ to $8.0$ bits/byte), post-EOF overlay boundary detection, and signature matching for embedded polyglots (ZIP, PDF, PE, ELF, PHP shells). Zero pixel rendering.
 4.  **`metaforge-sanitize`**: Lossless metadata scrubbing, post-EOF truncation, comment injection/removal, and CSV formula injection neutralization (`=`, `+`, `-`, `@`, `\t`, `\r`). Zero bitmap re-encoding.
-5.  **`metaforge-cli`**: Unified terminal cockpit, monospace table visualizer, structured exporter (Table, JSON, JSONL, formula-shielded CSV), and command orchestrator. Zero raw parsing.
+5.  **`metaforge-converter`**: Pure-Rust, zero-dependency transcoding engine for image containers (JPEG, PNG, WebP, GIF, BMP, TIFF) and audio containers (WAV), channel mixing, sample rate resampling, and stream telemetry probing. Zero C/FFI runtime bindings.
+6.  **`metaforge-cli`**: Unified terminal cockpit, monospace table visualizer, structured exporter (Table, JSON, JSONL, formula-shielded CSV), and command orchestrator. Zero raw parsing.
 
 ```mermaid
 graph TD
@@ -30,6 +31,12 @@ graph TD
         WebpParser["webp.rs"]
         GifParser["gif.rs"]
         HeicParser["heic.rs"]
+    end
+
+    subgraph Converter ["crates/metaforge-converter"]
+        ImageTranscode["image_transcode.rs"]
+        AudioTranscode["audio_transcode.rs"]
+        Probe["probe.rs"]
     end
 
     subgraph Forensics ["crates/metaforge-forensics"]
@@ -57,9 +64,12 @@ graph TD
     Main --> Detector
     Main --> Forensics
     Main --> Sanitize
+    Main --> Converter
     Main --> Table
     Main --> Export
 
+    Converter --> Core
+    Converter --> Parsers
     Detector --> JpegParser
     Detector --> PngParser
     Detector --> WebpParser
@@ -127,7 +137,23 @@ flowchart TD
 
 ---
 
-## 🔬 3. Steganography & Forensics Engine
+## 🔄 3. Media Transcoding Engine (`metaforge-converter`)
+
+### Image Transcoding Architecture
+- Decodes image formats via pure Rust decoders into memory representations.
+- Protects against decompression bombs: rejects any input or target dimension $> 16,384 \times 16,384$ pixels or total allocations exceeding 256 megapixels.
+- Encodes output using native Rust encoders for JPEG (with quality parameter), PNG, WebP (lossless), BMP, TIFF, and GIF.
+
+### Audio Transcoding Architecture
+- Decodes linear PCM WAV streams using pure Rust `hound`.
+- Channel Transformation:
+  - **Stereo ➔ Mono**: Computes arithmetic mean across channels: $M_i = \frac{L_i + R_i}{2}$.
+  - **Mono ➔ Stereo**: Duplicates sample to both output channels.
+- Resampling: Deterministic linear interpolation across sample frequencies (e.g. $44,100\text{ Hz} \leftrightarrow 48,000\text{ Hz}$ or downsampling to $22,050\text{ Hz}$).
+
+---
+
+## 🔬 4. Steganography & Forensics Engine
 
 ### Shannon Entropy Computation
 Entropy quantifies the uncertainty and randomness in the byte distribution ($0.0$ to $8.0$ bits per byte):
@@ -150,11 +176,11 @@ Walks data starting past header offsets to discover hidden file signatures witho
 
 ---
 
-## 🛡️ 4. Tier 6 Adversarial Invariants (`POC TDD+++++`)
+## 🛡️ 5. Tier 6 Adversarial Invariants (`POC TDD+++++`)
 
 1. **Formula Injection Neutralization**:
    Any cell beginning with `=, +, -, @, \t, \r` in CSV exports is automatically escaped with a leading single-quote `'` to prevent remote code execution in spreadsheet software.
 2. **Terminal Escapes Neutralization**:
    All user-supplied EXIF text, comments, and camera model strings are scrubbed of raw ANSI CSI (`\x1b[...]`) and OSC (`\x1b]...;...`) control codes before table rendering.
 3. **Allocation Bomb Resistance**:
-   Segment lengths and box bounds exceeding remaining buffer capacity are rejected immediately to prevent memory exhaustion DoS attacks.
+   Segment lengths, box bounds, and image resize dimensions exceeding safety capacity are rejected immediately to prevent memory exhaustion DoS attacks.

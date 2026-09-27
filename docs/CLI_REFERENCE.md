@@ -1,6 +1,6 @@
 # 🛠️ MetaForge CLI Reference Manual
 
-The `metaforge` CLI provides a unified, zero-dependency sovereign toolkit for extracting, forensically auditing, editing, and scrubbing metadata across JPEG, PNG, WebP, GIF, and HEIC containers.
+The `metaforge` CLI provides a unified, zero-dependency sovereign toolkit for extracting, forensically auditing, editing, transcoding, and scrubbing media across JPEG, PNG, WebP, GIF, HEIC, BMP, TIFF, and WAV containers.
 
 ---
 
@@ -11,7 +11,7 @@ metaforge [OPTIONS] [FILE] [COMMAND]
 ```
 
 ### 📥 Arguments & Options
-*   `[FILE]`: Target image file to scan (default command if no subcommand provided).
+*   `[FILE]`: Target image or media file to scan (default command if no subcommand provided).
 *   `-f, --format <FORMAT>`: Output serialization format. Default: `table`.
     *   `table`: Rich Unicode monospace table with ANSI styling.
     *   `json`: Pretty-printed structured JSON object.
@@ -32,6 +32,8 @@ metaforge [OPTIONS] [FILE] [COMMAND]
 | **`sanitize`** | Strip metadata and truncate post-EOF overlays | `--out`, `--inplace`, `--overlay-only` | `metaforge-sanitize` |
 | **`comment`** | Read or edit comments / PNG text tags | `-s, --set`, `-d, --delete`, `-k, --key` | `metaforge-sanitize` |
 | **`dump`** | Dump low-level segments and chunk structures | `[FILE]`, `-v` | `metaforge-parsers` |
+| **`convert`** | Transcode image/audio containers with resize/quality | `<INPUT> <OUTPUT>`, `-q`, `-r`, `--rate`, `--channels` | `metaforge-converter` |
+| **`probe`** | Probe media kind, streams, duration, sample rate | `<FILE>`, `--format` | `metaforge-converter` |
 
 ---
 
@@ -45,45 +47,50 @@ metaforge scan test_images/img6-gps.jpg
 metaforge test_images/img6-gps.jpg
 ```
 
-Export to formula-shielded CSV:
-```bash
-metaforge -f csv test_images/img6-gps.jpg > report.csv
-```
+---
 
-Export to newline-delimited JSON stream:
+### B. Media & Stream Telemetry Probe (`probe`)
+Inspects container format, image dimensions, audio channels, sample rates, and bit depths:
 ```bash
-metaforge -f jsonl test_images/img6-gps.jpg
+metaforge probe test_images/img6-gps.jpg
+metaforge probe recording.wav
 ```
 
 ---
 
-### B. Forensics & Steganography Audit (`audit`)
+### C. Media & Image Transcoding (`convert`)
+Converts images and audio containers with zero C/FFI dependencies:
+
+```bash
+# Convert JPEG to PNG:
+metaforge convert input.jpg output.png
+
+# Convert and resize image to WebP with custom quality:
+metaforge convert photo.jpg web_optimized.webp --quality 80 --resize 1280x720
+
+# Transcode WAV audio: downmix to Mono and resample to 44.1 kHz:
+metaforge convert stereo_in.wav mono_out.wav --channels 1 --rate 44100
+```
+
+---
+
+### D. Forensics & Steganography Audit (`audit`)
 Calculates Shannon entropy ($0.0 - 8.0$), compares logical vs physical file boundaries to detect post-EOF overlays, and scans for embedded polyglots:
 ```bash
 metaforge audit test_images/img6-gps.jpg
 ```
 
-**Audit Verdicts:**
-*   `CLEAN (0 bytes)`: No post-EOF trailing overlay detected.
-*   `ALERT: Trailing Overlay`: Physical file size exceeds logical image end.
-*   `ALERT: Found`: Embedded ZIP, PDF, PE, ELF, or PHP web shell signature detected.
-
 ---
 
-### C. Low-Level Segment & Chunk Dump (`dump`)
+### E. Low-Level Segment & Chunk Dump (`dump`)
 Inspects raw markers, segment offsets, and byte lengths:
 ```bash
 metaforge dump test_images/img6-gps.jpg
 ```
 
-Verbose dump with hex view:
-```bash
-metaforge dump -v test_images/flower.png
-```
-
 ---
 
-### D. Privacy Sanitizer & Overlay Scrubber (`sanitize`)
+### F. Privacy Sanitizer & Overlay Scrubber (`sanitize`)
 Removes privacy-compromising metadata and strips hidden payloads:
 
 ```bash
@@ -99,7 +106,7 @@ metaforge sanitize suspicious_image.png --inplace
 
 ---
 
-### E. Comment & Text Tag Editor (`comment`)
+### G. Comment & Text Tag Editor (`comment`)
 Inspects, sets, or removes user comments:
 
 ```bash
@@ -111,7 +118,4 @@ metaforge comment test_images/img1.jpg -s "Authorized Archive" -o modified.jpg
 
 # Set PNG textual keyword:
 metaforge comment test_images/flower.png -k "Author" -s "Archive Team" -o flower_tagged.png
-
-# Delete existing comment:
-metaforge comment modified.jpg -d -o stripped.jpg
 ```

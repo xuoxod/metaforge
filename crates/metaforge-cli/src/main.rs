@@ -2,8 +2,15 @@ mod args;
 mod export;
 mod table;
 
-use args::{AuditArgs, Cli, Commands, CommentArgs, DumpArgs, OutputFormat, SanitizeArgs, ScanArgs};
+use args::{
+    AuditArgs, Cli, Commands, CommentArgs, ConvertArgs, DumpArgs, OutputFormat, ProbeArgs,
+    SanitizeArgs, ScanArgs,
+};
 use clap::Parser;
+use metaforge_converter::{
+    convert_audio_file, convert_image_file, detect_target_format_from_path, probe_media_file,
+    AudioConvertOptions, ImageConvertOptions, ImageTargetFormat,
+};
 use metaforge_core::{ContainerType, MetadataEntry, MetaForgeError, TagCategory};
 use metaforge_forensics::{calculate_shannon_entropy, detect_overlay, scan_embedded_payloads};
 use metaforge_parsers::{
@@ -44,6 +51,8 @@ fn main() -> ExitCode {
         Some(Commands::Sanitize(args)) => execute_sanitize(&args),
         Some(Commands::Comment(args)) => execute_comment(&args),
         Some(Commands::Dump(args)) => execute_dump(&args),
+        Some(Commands::Convert(args)) => execute_convert(&args, cli.format),
+        Some(Commands::Probe(args)) => execute_probe(&args, cli.format),
         None => {
             if let Some(file) = cli.file {
                 let scan_args = ScanArgs {
@@ -510,3 +519,109 @@ fn execute_dump(args: &DumpArgs) -> Result<(), MetaForgeError> {
     println!();
     Ok(())
 }
+
+fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaForgeError> {
+    let inp = &args.input;
+    let outp = &args.output;
+
+    // Check if audio (e.g. .wav)
+    let in_ext = inp.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    let out_ext = outp.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+
+    let report = if in_ext == "wav" && out_ext == "wav" {
+        let audio_opts = AudioConvertOptions {
+            target_sample_rate: args.rate,
+            target_channels: args.channels,
+            target_bits_per_sample: None,
+        };
+        convert_audio_file(inp, outp, &audio_opts)?
+    } else {
+        // Image transcoding
+        let target_fmt = detect_target_format_from_path(outp).unwrap_or(ImageTargetFormat::Png);
+        let resize = if let Some(ref r) = args.resize {
+            let parts: Vec<&str> = r.split('x').collect();
+            if parts.len() == 2 {
+                let w: u32 = parts[0].trim().parse().map_err(|_| MetaForgeError::ConversionError {
+                    detail: format!("Invalid resize width: '{}'", parts[0]),
+                })?;
+                let h: u32 = parts[1].trim().parse().map_err(|_| MetaForgeError::ConversionError {
+                    detail: format!("Invalid resize height: '{}'", parts[1]),
+                })?;
+                Some((w, h))
+            } else {
+                return Err(MetaForgeError::ConversionError {
+                    detail: format!("Invalid resize format '{}'. Expected WxH (e.g. 800x600)", r),
+                });
+            }
+        } else {
+            None
+        };
+
+        let img_opts = ImageConvertOptions {
+            target_format: target_fmt,
+            quality: Some(args.quality),
+            resize,
+            preserve_metadata: true,
+            max_dimension: 16384,
+        };
+        convert_image_file(inp, outp, &img_opts)?
+    };
+
+    match format {
+        OutputFormat::Json | OutputFormat::Jsonl => {
+            let json = serde_json::to_string_pretty(&report).map_err(|e| MetaForgeError::Io(std::io::Error::other(e.to_string())))?;
+            println!("{}", json);
+        }
+        _ => {
+            println!("\n🔄 Transcode Complete: {} ➔ {}", report.input_path, report.output_path);
+            let mut t = comfy_table::Table::new();
+            t.load_preset(comfy_table::presets::UTF8_FULL);
+            t.set_header(vec!["Property", "Value"]);
+            t.add_row(vec!["Input Size", &format!("{} bytes ({:.2} KB)", report.input_bytes, report.input_bytes as f64 / 1024.0)]);
+            t.add_row(vec!["Output Size", &format!("{} bytes ({:.2} KB)", report.output_bytes, report.output_bytes as f64 / 1024.0)]);
+            t.add_row(vec!["Target Format", &report.output_format]);
+            t.add_row(vec!["Details", &report.details]);
+            println!("{t}\n");
+        }
+    }
+    Ok(())
+}
+
+fn execute_probe(args: &ProbeArgs, format: OutputFormat) -> Result<(), MetaForgeError> {
+    let probe = probe_media_file(&args.file)?;
+
+    match format {
+        OutputFormat::Json | OutputFormat::Jsonl => {
+            let json = serde_json::to_string_pretty(&probe).map_err(|e| MetaForgeError::Io(std::io::Error::other(e.to_string())))?;
+            println!("{}", json);
+        }
+        _ => {
+            println!("\n🔍 Media Container Probe: {}", probe.file_path);
+            let mut t = comfy_table::Table::new();
+            t.load_preset(comfy_table::presets::UTF8_FULL);
+            t.set_header(vec!["Stream Property", "Value"]);
+            t.add_row(vec!["Media Kind", &probe.media_kind]);
+            t.add_row(vec!["Format / Container", &probe.format]);
+            t.add_row(vec!["File Size", &format!("{} bytes ({:.2} KB)", probe.size_bytes, probe.size_bytes as f64 / 1024.0)]);
+            if let Some((w, h)) = probe.dimensions {
+                t.add_row(vec!["Dimensions", &format!("{} x {} px", w, h)]);
+            }
+            if let Some(dur) = probe.duration_seconds {
+                t.add_row(vec!["Duration", &format!("{:.3} s", dur)]);
+            }
+            if let Some(rate) = probe.sample_rate {
+                t.add_row(vec!["Sample Rate", &format!("{} Hz", rate)]);
+            }
+            if let Some(ch) = probe.channels {
+                let desc = if ch == 1 { "Mono (1 channel)" } else if ch == 2 { "Stereo (2 channels)" } else { "Multi-Channel" };
+                t.add_row(vec!["Channels", desc]);
+            }
+            if let Some(bits) = probe.bits_per_sample {
+                t.add_row(vec!["Bits per Sample", &format!("{}-bit", bits)]);
+            }
+            println!("{t}\n");
+        }
+    }
+    Ok(())
+}
+

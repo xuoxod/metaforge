@@ -86,7 +86,7 @@ cmd_summary() {
         cat << EOF
 {
   "system": "metaforge",
-  "topology": "Decoupled 5-Crate Workspace",
+  "topology": "Decoupled 6-Crate Workspace",
   "ojp_enforced": true,
   "static_target": "x86_64-unknown-linux-musl",
   "root_dir": "${ROOT_DIR}"
@@ -121,6 +121,7 @@ EOF
                 metaforge-parsers|parsers) role="Zero-Copy Container Segment Walkers" ;;
                 metaforge-forensics|forensics) role="Shannon Entropy & Polyglot Scanner" ;;
                 metaforge-sanitize|sanitize) role="Metadata Scrubber & Lossless Editor" ;;
+                metaforge-converter|converter) role="Zero-Copy Image & Audio Transcoder" ;;
                 metaforge-cli|cli|src) role="Cockpit CLI, Tables & Report Stream" ;;
                 utils) role="Legacy Utils (Scaffold Target)" ;;
             esac
@@ -140,6 +141,7 @@ cmd_crates() {
         "metaforge-parsers:Zero-copy binary segment/chunk walkers for JPEG, PNG, WebP, GIF, HEIC. Zero terminal formatting."
         "metaforge-forensics:Shannon entropy calculation (0.0-8.0), EOF overlay detection, polyglot signature scanner. Zero bitmap decoding."
         "metaforge-sanitize:Lossless in-memory metadata scrubbing, comment insertion/deletion, PNG chunk updating, CRC32. Zero image recompression."
+        "metaforge-converter:Zero-dependency multi-format image (JPEG/PNG/WebP/BMP/TIFF) & audio (WAV) transcoding, stream probing, and resize/quality engine."
         "metaforge-cli:Unified command-line interface, rich UTF-8 monospace tables, formula-shielded exports. Zero raw parsing."
     )
 

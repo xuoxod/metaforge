@@ -26,13 +26,14 @@ All builds are orchestrated via `scripts/metaforge-build.sh`:
 We enforce a comprehensive multi-tier testing framework, including Tier 6 adversarial self-attack suites:
 
 ```bash
-# Execute complete workspace test matrix
+# Execute complete workspace test matrix across all 6 crates
 ./scripts/metaforge-test.sh --all
 
 # Execute Tier 6 Red-Team Adversarial Self-Attack suites only
 ./scripts/metaforge-test.sh --adversarial
 
 # Execute tests for a specific crate
+./scripts/metaforge-test.sh --converter
 ./scripts/metaforge-test.sh --parsers
 ./scripts/metaforge-test.sh --forensics
 ./scripts/metaforge-test.sh --sanitize
@@ -41,6 +42,7 @@ We enforce a comprehensive multi-tier testing framework, including Tier 6 advers
 ```
 
 ### Adversarial Test Invariants (`POC TDD+++++`)
+*   **`tests/adversarial_converter_tests.rs`**: Tests resistance against dimension allocation bombs (DoS resize), corrupted/truncated streams, empty buffers, and audio channel overflow attacks.
 *   **`tests/adversarial_cli_tests.rs`**: Asserts formula-injection protection in CSV exports and ANSI/OSC terminal escape sequence scrubbing.
 *   **`tests/adversarial_core_tests.rs`**: Asserts resilience against NaN/Infinity GPS coordinates, invalid cardinal references, and fuzzing inputs.
 *   **`tests/adversarial_forensics_tests.rs`**: Tests PE false-positive immunity, PHP web shell injection, and high-entropy stego thresholds.
@@ -69,6 +71,6 @@ Inspect crate boundaries, LOC metrics, and security invariants:
 ## 📂 4. Crate Modification Rules
 
 When extending `metaforge`:
-1.  **Zero Panic Policy**: Production library crates (`metaforge-core`, `metaforge-parsers`, `metaforge-forensics`, `metaforge-sanitize`) must not use `.unwrap()` or `.expect()` in non-test code. Return typed `MetaForgeError` results instead.
+1.  **Zero Panic Policy**: Production library crates (`metaforge-core`, `metaforge-parsers`, `metaforge-forensics`, `metaforge-sanitize`, `metaforge-converter`) must not use `.unwrap()` or `.expect()` in non-test code. Return typed `MetaForgeError` results instead.
 2.  **Zero-Copy Ingestion**: Ingest binary containers as immutable byte slices `&[u8]`. Avoid allocating unneeded intermediate buffers.
 3.  **Strict OJP**: Keep duties strictly decoupled across crates. Do not import UI/formatting crates into parser/forensic engines.

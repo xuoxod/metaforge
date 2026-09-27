@@ -64,5 +64,5 @@ fn test_adversarial_webp_riff_size_bomb() {
 fn test_adversarial_empty_and_single_byte_files() {
     assert!(parse_jpeg(&[]).is_err());
     assert!(parse_png(&[0x89]).is_err());
-    assert!(parse_webp(&[b'R']).is_err());
+    assert!(parse_webp(b"R").is_err());
 }

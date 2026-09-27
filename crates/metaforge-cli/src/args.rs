@@ -50,6 +50,12 @@ pub enum Commands {
 
     /// Dump low-level container segments and chunk hierarchies
     Dump(DumpArgs),
+
+    /// Transcode and convert image and audio containers with resize and quality controls
+    Convert(ConvertArgs),
+
+    /// Probe media container, audio streams, and image telemetry
+    Probe(ProbeArgs),
 }
 
 #[derive(Args, Debug)]
@@ -126,3 +132,38 @@ pub struct DumpArgs {
     #[arg(value_name = "FILE")]
     pub file: PathBuf,
 }
+
+#[derive(Args, Debug)]
+pub struct ConvertArgs {
+    /// Input media or image file to convert
+    #[arg(value_name = "INPUT")]
+    pub input: PathBuf,
+
+    /// Target output file path
+    #[arg(value_name = "OUTPUT")]
+    pub output: PathBuf,
+
+    /// Target image quality (1-100, JPEG and WebP only) [default: 85]
+    #[arg(short, long, default_value_t = 85)]
+    pub quality: u8,
+
+    /// Resize image to WxH (e.g., "800x600")
+    #[arg(short, long)]
+    pub resize: Option<String>,
+
+    /// Target audio sample rate in Hz (e.g., 44100, 48000 for WAV)
+    #[arg(long)]
+    pub rate: Option<u32>,
+
+    /// Target audio channels (1=mono, 2=stereo)
+    #[arg(long)]
+    pub channels: Option<u16>,
+}
+
+#[derive(Args, Debug)]
+pub struct ProbeArgs {
+    /// Target image or media file to probe
+    #[arg(value_name = "FILE")]
+    pub file: PathBuf,
+}
+
