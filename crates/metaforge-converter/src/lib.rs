@@ -9,6 +9,8 @@
 
 pub mod batch;
 pub mod codecs;
+pub mod converters;
+pub mod detect;
 pub mod dsp;
 pub mod pipeline;
 pub mod probe;
@@ -19,6 +21,8 @@ pub use codecs::{
     decode_audio_bytes, decode_audio_file, decode_audio_stream, encode_wav_bytes, encode_wav_file,
     transcode_image_bytes, DecodedAudio,
 };
+pub use converters::convert_media;
+pub use detect::{detect_file_format, detect_media_format, detect_media_kind, sniff_magic_bytes};
 pub use dsp::{
     apply_gain, downmix_to_mono, normalize_peak, remix_channels, resample_pcm_f32,
     upmix_mono_to_stereo,
@@ -79,18 +83,12 @@ pub fn convert_media_file<P1: AsRef<Path>, P2: AsRef<Path>>(
     image_options: &ImageConvertOptions,
     audio_options: &AudioConvertOptions,
 ) -> Result<ConvertReport> {
-    let inp = input_path.as_ref();
-    let ext = inp
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-
-    if is_audio_or_video_extension(&ext) {
-        convert_audio_file(inp, output_path, audio_options)
-    } else {
-        convert_image_file(inp, output_path, image_options)
-    }
+    let unified = UnifiedConvertOptions {
+        image: image_options.clone(),
+        audio: audio_options.clone(),
+        ..Default::default()
+    };
+    convert_media(input_path, output_path, &unified)
 }
 
 /// Transcode from an arbitrary `Read` stream into a `Write` stream (UNIX stdio pipe support).

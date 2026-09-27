@@ -246,3 +246,94 @@ fn test_convert_stream_pipes() {
     assert_eq!(report.output_path, "<stdout>");
     assert!(output.starts_with(&[0xFF, 0xD8])); // JPEG
 }
+
+#[test]
+fn test_detect_media_format_sniffing() {
+    use metaforge_converter::detect::{detect_media_format, detect_media_kind, sniff_magic_bytes};
+    use metaforge_converter::types::MediaKind;
+
+    let png = create_synthetic_png();
+    let detected_png = sniff_magic_bytes(&png);
+    assert_eq!(detected_png.map(|m| m.kind()), Some(MediaKind::Image));
+
+    let wav = create_synthetic_wav(1, 16000, 100);
+    let detected_wav = sniff_magic_bytes(&wav);
+    assert_eq!(detected_wav.map(|m| m.kind()), Some(MediaKind::Audio));
+
+    let kind_from_ext = detect_media_kind(None, Some(std::path::Path::new("video.mp4")));
+    assert_eq!(kind_from_ext, Some(MediaKind::Video));
+
+    let fmt_from_ext = detect_media_format(None, Some(std::path::Path::new("track.flac")));
+    assert_eq!(fmt_from_ext.map(|f| f.to_extension()), Some("flac"));
+}
+
+#[test]
+fn test_universal_media_conversion_and_remuxing() {
+    use metaforge_converter::converters::util::find_ffmpeg;
+    use metaforge_converter::{convert_media, UnifiedConvertOptions};
+
+    let dir = tempdir().expect("tempdir");
+    let png_path = dir.path().join("input.png");
+    let webp_path = dir.path().join("output.webp");
+    let wav_path = dir.path().join("input.wav");
+    let out_wav_path = dir.path().join("resampled.wav");
+
+    // 1. Image to Image via universal convert_media
+    let png = create_synthetic_png();
+    fs::write(&png_path, png).expect("write png");
+    let report_img = convert_media(&png_path, &webp_path, &UnifiedConvertOptions::default()).expect("convert image");
+    assert!(webp_path.exists());
+    assert_eq!(report_img.output_format, "webp");
+
+    // 2. Audio to Audio (WAV to resampled WAV)
+    let wav = create_synthetic_wav(2, 44100, 4410);
+    fs::write(&wav_path, wav).expect("write wav");
+    let mut audio_opts = UnifiedConvertOptions::default();
+    audio_opts.audio.target_channels = Some(1);
+    audio_opts.audio.target_sample_rate = Some(16000);
+    let report_aud = convert_media(&wav_path, &out_wav_path, &audio_opts).expect("convert audio");
+    assert!(out_wav_path.exists());
+    assert_eq!(report_aud.output_format, "wav");
+
+    // 3. Video / Audio transcode tests if ffmpeg is available
+    if find_ffmpeg().is_some() {
+        let test_mp4 = dir.path().join("test_input.mp4");
+        // Create synthetic 1-second test MP4 with video & audio
+        let status = std::process::Command::new("ffmpeg")
+            .arg("-v").arg("error")
+            .arg("-f").arg("lavfi").arg("-i").arg("testsrc=duration=1:size=160x120:rate=10")
+            .arg("-f").arg("lavfi").arg("-i").arg("sine=frequency=440:duration=1")
+            .arg("-c:v").arg("libx264").arg("-c:a").arg("aac")
+            .arg("-y").arg(&test_mp4)
+            .status();
+
+        if let Ok(st) = status {
+            if st.success() {
+                // Video to Video (MP4 to MKV)
+                let test_mkv = dir.path().join("output.mkv");
+                let report_v2v = convert_media(&test_mp4, &test_mkv, &UnifiedConvertOptions::default()).expect("convert v2v");
+                assert!(test_mkv.exists());
+                assert_eq!(report_v2v.output_format, "mkv");
+
+                // Video to Audio extraction (MP4 to MP3)
+                let test_mp3 = dir.path().join("output.mp3");
+                let report_v2a = convert_media(&test_mp4, &test_mp3, &UnifiedConvertOptions::default()).expect("convert v2a");
+                assert!(test_mp3.exists());
+                assert_eq!(report_v2a.output_format, "mp3");
+
+                // Video to Animated GIF (MP4 to GIF)
+                let test_gif = dir.path().join("output.gif");
+                let report_v2g = convert_media(&test_mp4, &test_gif, &UnifiedConvertOptions::default()).expect("convert v2g");
+                assert!(test_gif.exists());
+                assert_eq!(report_v2g.output_format, "gif");
+
+                // Audio to Audio (WAV to MP3)
+                let test_wav2mp3 = dir.path().join("audio.mp3");
+                let report_a2a = convert_media(&wav_path, &test_wav2mp3, &UnifiedConvertOptions::default()).expect("convert a2a");
+                assert!(test_wav2mp3.exists());
+                assert_eq!(report_a2a.output_format, "mp3");
+            }
+        }
+    }
+}
+

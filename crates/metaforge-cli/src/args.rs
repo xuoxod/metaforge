@@ -141,15 +141,15 @@ pub struct DumpArgs {
 
 #[derive(Args, Debug)]
 pub struct ConvertArgs {
-    /// Input media or image file to convert (use '-' for stdin)
-    #[arg(value_name = "INPUT")]
-    pub input: PathBuf,
+    /// Input media or image file(s) to convert (use '-' for stdin)
+    #[arg(value_name = "INPUT", required = true)]
+    pub inputs: Vec<PathBuf>,
 
-    /// Target output file path (use '-' for stdout)
-    #[arg(value_name = "OUTPUT")]
-    pub output: PathBuf,
+    /// Target output file or destination directory (use '-' for stdout)
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
 
-    /// Explicit target format extension (e.g. --target webp, -t wav; required when output is stdout '-')
+    /// Explicit target format extension (e.g. --target webp, -t mp3, -t mkv, -t wav)
     #[arg(short, long)]
     pub target: Option<String>,
 

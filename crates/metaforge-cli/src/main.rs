@@ -8,9 +8,9 @@ use args::{
 };
 use clap::Parser;
 use metaforge_converter::{
-    convert_media_file, convert_stream, detect_target_format_from_path, execute_batch_convert,
-    probe_media_file, AudioConvertOptions, BatchConvertOptions, ConvertReport, ImageConvertOptions,
-    ImageTargetFormat,
+    convert_media, convert_stream, execute_batch_convert, probe_media_file, AudioConvertOptions,
+    AudioTargetFormat, BatchConvertOptions, ConvertReport, ImageConvertOptions, ImageTargetFormat,
+    UnifiedConvertOptions, VideoConvertOptions, VideoTargetFormat,
 };
 use metaforge_core::{ContainerType, MetadataEntry, MetaForgeError, TagCategory};
 use metaforge_forensics::{
@@ -566,22 +566,14 @@ fn print_convert_report(report: &ConvertReport, format: OutputFormat) -> Result<
 }
 
 fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaForgeError> {
-    let is_stdin = args.input.as_os_str() == "-";
-    let is_stdout = args.output.as_os_str() == "-";
+    if args.inputs.is_empty() {
+        return Err(MetaForgeError::ConversionError {
+            detail: "At least one input file must be specified".to_string(),
+        });
+    }
 
-    let audio_opts = AudioConvertOptions {
-        target_sample_rate: args.rate,
-        target_channels: args.channels,
-        target_bits_per_sample: None,
-        gain: args.gain,
-        normalize: args.normalize,
-    };
-
-    let target_img_fmt = if let Some(ref f) = args.target {
-        ImageTargetFormat::from_extension(f).unwrap_or(ImageTargetFormat::Png)
-    } else {
-        detect_target_format_from_path(&args.output).unwrap_or(ImageTargetFormat::Png)
-    };
+    let is_stdin = args.inputs.len() == 1 && args.inputs[0].as_os_str() == "-";
+    let is_stdout = args.output.as_ref().is_some_and(|p| p.as_os_str() == "-");
 
     let resize = if let Some(ref r) = args.resize {
         let parts: Vec<&str> = r.split('x').collect();
@@ -602,24 +594,18 @@ fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaF
         None
     };
 
-    let img_opts = ImageConvertOptions {
-        target_format: target_img_fmt,
-        quality: Some(args.quality),
-        resize,
-        preserve_metadata: true,
-        max_dimension: 16384,
-    };
-
     // Stdio streaming pipe support
     if is_stdin || is_stdout {
         let target_fmt_str = if let Some(ref f) = args.target {
             f.clone()
-        } else if !is_stdout {
-            args.output
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("wav")
-                .to_string()
+        } else if let Some(ref out) = args.output {
+            if out.as_os_str() != "-" {
+                out.extension().and_then(|s| s.to_str()).unwrap_or("wav").to_string()
+            } else {
+                return Err(MetaForgeError::ConversionError {
+                    detail: "Explicit --target (e.g. -t wav, -t webp) is required when streaming to stdout '-'".to_string(),
+                });
+            }
         } else {
             return Err(MetaForgeError::ConversionError {
                 detail: "Explicit --target (e.g. -t wav, -t webp) is required when streaming to stdout '-'".to_string(),
@@ -627,7 +613,7 @@ fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaF
         };
 
         let in_hint = if !is_stdin {
-            args.input.extension().and_then(|s| s.to_str())
+            args.inputs[0].extension().and_then(|s| s.to_str())
         } else {
             None
         };
@@ -635,12 +621,29 @@ fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaF
         if args.dry_run {
             println!(
                 "🔍 Dry-run: Streaming transcode from {} to {} planned (format: {})",
-                if is_stdin { "<stdin>" } else { args.input.to_str().unwrap_or("input") },
-                if is_stdout { "<stdout>" } else { args.output.to_str().unwrap_or("output") },
+                if is_stdin { "<stdin>" } else { args.inputs[0].to_str().unwrap_or("input") },
+                if is_stdout { "<stdout>" } else { args.output.as_ref().and_then(|p| p.to_str()).unwrap_or("output") },
                 target_fmt_str
             );
             return Ok(());
         }
+
+        let img_opts = ImageConvertOptions {
+            target_format: ImageTargetFormat::from_extension(&target_fmt_str).unwrap_or(ImageTargetFormat::Png),
+            quality: Some(args.quality),
+            resize,
+            preserve_metadata: true,
+            max_dimension: 16384,
+        };
+
+        let audio_opts = AudioConvertOptions {
+            target_format: AudioTargetFormat::from_extension(&target_fmt_str).unwrap_or(AudioTargetFormat::Wav),
+            target_sample_rate: args.rate,
+            target_channels: args.channels,
+            target_bits_per_sample: None,
+            gain: args.gain,
+            normalize: args.normalize,
+        };
 
         let report = if is_stdin && is_stdout {
             convert_stream(
@@ -652,7 +655,8 @@ fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaF
                 &audio_opts,
             )?
         } else if is_stdin {
-            let out_file = std::fs::File::create(&args.output)?;
+            let out_p = args.output.as_ref().unwrap();
+            let out_file = std::fs::File::create(out_p)?;
             convert_stream(
                 std::io::stdin().lock(),
                 out_file,
@@ -662,7 +666,7 @@ fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaF
                 &audio_opts,
             )?
         } else {
-            let in_file = std::fs::File::open(&args.input)?;
+            let in_file = std::fs::File::open(&args.inputs[0])?;
             convert_stream(
                 in_file,
                 std::io::stdout().lock(),
@@ -679,23 +683,96 @@ fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaF
         return Ok(());
     }
 
-    if args.dry_run {
-        let in_meta = fs::metadata(&args.input)?;
-        println!("\n🔍 Dry-run: Conversion Pre-Flight Estimation");
-        println!("  Input Path:   {}", args.input.display());
-        println!("  Output Path:  {}", args.output.display());
-        println!(
-            "  Input Size:   {} bytes ({:.2} KB)",
-            in_meta.len(),
-            in_meta.len() as f64 / 1024.0
-        );
-        println!("  Target Fmt:   {}", target_img_fmt.to_extension());
-        println!("  Operation:    Transcode to target container format\n");
-        return Ok(());
+    // Determine target conversion pairs: (input_path, output_path)
+    let pairs: Vec<(std::path::PathBuf, std::path::PathBuf)> = match (args.inputs.len(), &args.output, &args.target) {
+        // Syntax 1: `metaforge convert input.ext output.ext`
+        (2, None, None) => {
+            vec![(args.inputs[0].clone(), args.inputs[1].clone())]
+        }
+        // Syntax 2: `metaforge convert input.ext -o output.ext`
+        (1, Some(out), _) if !out.is_dir() => {
+            vec![(args.inputs[0].clone(), out.clone())]
+        }
+        // Syntax 3: `metaforge convert input.ext -t target_fmt`
+        (1, None, Some(target)) => {
+            let inp = &args.inputs[0];
+            let out = inp.with_extension(target);
+            vec![(inp.clone(), out)]
+        }
+        // Syntax 4: Multi-file conversion: `metaforge convert f1 f2 f3 ... -t target [-o out_dir]`
+        (_, out_dir_opt, Some(target)) => {
+            let dest_dir = out_dir_opt.clone().unwrap_or_else(|| std::path::PathBuf::from("."));
+            if !dest_dir.exists() && !args.dry_run {
+                std::fs::create_dir_all(&dest_dir)?;
+            }
+            args.inputs
+                .iter()
+                .map(|inp| {
+                    let file_name = inp.file_stem().unwrap_or_default().to_string_lossy();
+                    let out_name = format!("{}.{}", file_name, target);
+                    (inp.clone(), dest_dir.join(out_name))
+                })
+                .collect()
+        }
+        _ => {
+            return Err(MetaForgeError::ConversionError {
+                detail: "Invalid conversion arguments. Usage: 'metaforge convert <input> <output>' or 'metaforge convert <input>... -t <target>'".to_string(),
+            });
+        }
+    };
+
+    for (inp, outp) in pairs {
+        if args.dry_run {
+            let in_meta = fs::metadata(&inp)?;
+            println!("\n🔍 Dry-run: Conversion Pre-Flight Estimation");
+            println!("  Input Path:   {}", inp.display());
+            println!("  Output Path:  {}", outp.display());
+            println!(
+                "  Input Size:   {} bytes ({:.2} KB)",
+                in_meta.len(),
+                in_meta.len() as f64 / 1024.0
+            );
+            println!("  Operation:    Transcode to target container format\n");
+            continue;
+        }
+
+        let target_ext = outp.extension().and_then(|s| s.to_str()).unwrap_or("png");
+        let target_img_fmt = ImageTargetFormat::from_extension(target_ext).unwrap_or(ImageTargetFormat::Png);
+        let target_aud_fmt = AudioTargetFormat::from_extension(target_ext).unwrap_or(AudioTargetFormat::Wav);
+        let target_vid_fmt = VideoTargetFormat::from_extension(target_ext).unwrap_or(VideoTargetFormat::Mp4);
+
+        let unified_opts = UnifiedConvertOptions {
+            image: ImageConvertOptions {
+                target_format: target_img_fmt,
+                quality: Some(args.quality),
+                resize,
+                preserve_metadata: true,
+                max_dimension: 16384,
+            },
+            audio: AudioConvertOptions {
+                target_format: target_aud_fmt,
+                target_sample_rate: args.rate,
+                target_channels: args.channels,
+                target_bits_per_sample: None,
+                gain: args.gain,
+                normalize: args.normalize,
+            },
+            video: VideoConvertOptions {
+                target_format: target_vid_fmt,
+                quality: Some(args.quality),
+                resize,
+                fps: None,
+                crf: Some(23),
+                faststart: true,
+                copy_streams: false,
+            },
+            dry_run: args.dry_run,
+        };
+
+        let report = convert_media(&inp, &outp, &unified_opts)?;
+        print_convert_report(&report, format)?;
     }
 
-    let report = convert_media_file(&args.input, &args.output, &img_opts, &audio_opts)?;
-    print_convert_report(&report, format)?;
     Ok(())
 }
 
@@ -750,6 +827,7 @@ fn execute_batch(args: &BatchArgs, format: OutputFormat) -> Result<(), MetaForge
             max_dimension: 16384,
         },
         audio_options: AudioConvertOptions {
+            target_format: AudioTargetFormat::from_extension(args.target.as_deref().unwrap_or("wav")).unwrap_or(AudioTargetFormat::Wav),
             target_sample_rate: args.rate,
             target_channels: args.channels,
             target_bits_per_sample: None,
