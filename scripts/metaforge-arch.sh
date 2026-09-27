@@ -86,7 +86,7 @@ cmd_summary() {
         cat << EOF
 {
   "system": "metaforge",
-  "topology": "Decoupled 6-Crate Workspace",
+  "topology": "Decoupled 7-Crate Workspace",
   "ojp_enforced": true,
   "static_target": "x86_64-unknown-linux-musl",
   "root_dir": "${ROOT_DIR}"

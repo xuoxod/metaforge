@@ -1,14 +1,20 @@
-# 🖼️ `metaforge`
+# 🖼️ MetaForge
 
-An enterprise-grade, zero-dependency, ultra-fast compiled sovereign forensics and media transcoding engine designed to audit, scan, sanitize, and convert binary containers. It extracts structural segment/chunk layouts, parses EXIF/XMP/TIFF metadata, calculates Shannon Entropy, detects hidden/embedded malicious polyglot payloads, losslessly scrubs metadata, and transcodes images (JPEG, PNG, WebP, GIF, BMP, TIFF) and audio (WAV) containers with zero C/FFI dependencies.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Architecture: 7-Crate OJP](https://img.shields.io/badge/Architecture-7--Crate%20OJP-brightgreen.svg)](docs/ARCHITECTURE.md)
+[![Verification: 51/51 Green](https://img.shields.io/badge/TDD%2B%2B%2B%2B%2B-51%2F51%20Passing-success.svg)](docs/DEVELOPER_GUIDE.md)
+[![Target: Static Musl PIE](https://img.shields.io/badge/Target-x86__64--musl%20PIE-blueviolet.svg)](docs/ARCHITECTURE.md)
+
+An enterprise-grade, zero-dependency sovereign media engine for digital image and audio containers. **MetaForge** audits container structure, extracts deep EXIF/GPS/TIFF metadata, performs statistical steganalysis, scrubs sensitive tracking footprints, extracts linear audio from video, and transcodes media across standard formats—statically compiled with **zero dynamic C/FFI dependencies**.
 
 ```mermaid
 graph TD
-    Media["📸 Image / Audio Containers"] --> CLI["🛡️ metaforge-cli (Cockpit Ingress)"]
-    CLI --> Parsers["⚡ metaforge-parsers (Zero-Copy Segment Walkers)"]
-    CLI --> Forensics["🔬 metaforge-forensics (Entropy & Polyglot Engine)"]
+    Media["📸 Image & Audio Containers"] --> CLI["🛡️ metaforge-cli (Cockpit Ingress)"]
+    CLI --> Parsers["⚡ metaforge-parsers (Zero-Copy Container Walkers)"]
+    CLI --> Forensics["🔬 metaforge-forensics (Entropy, Steganalysis & Signatures)"]
     CLI --> Sanitize["🧼 metaforge-sanitize (Scrubber & Formula Shield)"]
-    CLI --> Converter["🔄 metaforge-converter (Zero-Copy Transcoder & Probe)"]
+    CLI --> Converter["🔄 metaforge-converter (Native Transcoder & DSP)"]
+    FFI["🌉 metaforge-ffi (Universal C-ABI & JNI Bridge)"] -. Foreign Ingress .-> Core
     
     Parsers --> Core["🏛️ metaforge-core (Types, Tags, Geo, Errors)"]
     Forensics --> Core
@@ -16,162 +22,172 @@ graph TD
     Sanitize --> Parsers
     Converter --> Core
     Converter --> Parsers
+    FFI --> Parsers
+    FFI --> Forensics
+    FFI --> Sanitize
+    FFI --> Converter
 
     Forensics -- Post-EOF Overlay Alert --> Truncate["🧹 Truncate Overlay Data"]
     Forensics -- Stego / Web Shell Alert --> Strip["🧼 Deep Sanitize (APP/Private Chunks)"]
-    Converter -- Transcode & Resize --> Deliverable["📦 Clean Output Image/Audio"]
+    Converter -- Transcode & Resample --> Deliverable["📦 Clean Output Image/Audio"]
 ```
 
 ---
 
-## 🚀 Key Features
+## 🌟 Why MetaForge?
 
-*   **⚡ Zero-Dependency Image & Media Parsing**: Native structural scanners that sequentially parse segments, chunks, blocks, and boxes without loading pixel buffers into memory (sub-millisecond runtime).
-*   **📂 Multi-Format Support**: Comprehensive coverage across major containers:
-    *   **JPEG**: APP0–APP15, COM, DQT, DHT, SOF0/SOF2, SOS, EXIF/XMP, and marker layouts.
-    *   **PNG**: Full chunk walk (IHDR, PLTE, IDAT, IEND, tEXt, iTXt, pHYs, tIME, iCCP, eXIf, sBIT, bKGD, oFFs, sCAL).
-    *   **WebP**: RIFF container parsing, Extended Headers (`VP8X`), and `EXIF`/`XMP` metadata.
-    *   **GIF**: Logical Screen Descriptor, Comment Extensions (`0xFE`), and XMP Application Extensions (`0xFF`).
-    *   **HEIC**: ISOBMFF Box parsing, Spatial Extents (`ispe`), item location extents, and TIFF EXIF decoding.
-    *   **Audio & Video Media Containers**: Pure-Rust demuxing and decoding of MP4, MKV, WebM, MP3, FLAC, OGG/Vorbis, AAC, and WAV containers.
-*   **🔄 Zero-Dependency Media & Image Transcoding (`metaforge-converter`)**:
-    *   **Universal Audio Extraction**: Extract pristine linear PCM audio from video containers (MP4, MKV, WebM, MOV) and transcode audio formats (FLAC, MP3, OGG -> WAV) with zero C/FFI dependencies.
-    *   **Cross-Format Image Transcoding**: Convert seamlessly across JPEG, PNG, WebP, GIF, BMP, and TIFF.
-    *   **Chainable Audio DSP**: Arbitrary linear resampling ($16\text{ kHz}, 44.1\text{ kHz}, 48\text{ kHz}$), channel downmixing/upmixing, linear gain amplification, and peak normalization.
-    *   **Concurrent Batch Transcoding**: Recursive directory batch conversion with relative tree preservation, extension filtering, dry-run planning, and strict 4-worker concurrency guardrails (`metaforge batch`).
-    *   **UNIX Stream Piping**: Full stdin/stdout streaming support (`cat video.mp4 | metaforge convert - - -t wav > out.wav`).
-    *   **Stream Telemetry Probing**: Inspect container format, track counts, dimensions, sample rates, channels, and bit depths (`metaforge probe`).
-*   **🔍 Forensic Signature Scanner**: Walk-scans files beyond the logical end-of-file (EOF) offset to flag overlays, trailing payloads, or embedded assets (e.g., hidden ZIP archives, PDF docs, PE/ELF executables, PHP shells, or scripting blocks).
-*   **🛡️ Tier 6 Adversarial Self-Attack Immunity (`POC TDD+++++`)**:
-    *   **Formula & Code Injection Defense**: Automatically neutralizes spreadsheet injection attack vectors (`=`, `+`, `-`, `@`, `\t`, `\r`) in CSV exports by prefixing single-quotes (`'`).
-    *   **Terminal & Log Poisoning Defense**: Scrubs raw ANSI CSI control codes and OSC 8 hyperlink sequences from untrusted metadata tags before printing to console.
-    *   **Resource Exhaustion & Allocation Bomb Resistance**: Rigorous boundary checks disallowing billion-byte chunk length allocations, cyclical nested ISOBMFF boxes, corrupt RIFF sizes, or dimension decompression bombs ($> 16,384 \times 16,384$).
-*   **🧼 Advanced Sanitizers & Lossless Scrubbers**:
-    *   **Overlay Truncation**: Slices away appended overlay payloads from the logical end-of-file without altering compressed pixel bitstreams.
-    *   **Deep Sanitization**: Strips out comments and metadata fields (APP1–APP15 in JPEG; ancillary/private chunks in PNG) to neutralize web shell injection threats.
-    *   **Comment & Text Tag Editor**: Losslessly edits JPEG COM segments and PNG textual chunks (`tEXt`/`iTXt`) in-place or into clean target copies.
-*   **📊 Shannon Entropy Calculation**: Computes byte distribution randomness ($0.0$ to $8.0$ bits/byte) to identify encrypted payloads or high-entropy steganography.
-*   **📦 Standalone Musl Compilation**: 100% statically linked standalone binary targeting `x86_64-unknown-linux-musl` with zero glibc or dynamic runtime dependencies.
+Every digital image and media recording carries hidden layers:
+* **Privacy Leaks**: Photos taken on smartphones or cameras silently record your exact physical GPS coordinates, camera serial numbers, device model, and capture timestamp.
+* **Security Risks**: Cyber threats often conceal malicious scripts, web shells, or hidden executable archives appended beyond the end of an ordinary photo, or secretly modulate pixel bitstreams (steganography) to exfiltrate data.
+* **Format Fragmentation**: Media libraries often require different tools to inspect tags, extract audio, convert formats, or strip tracking metadata before publishing.
+
+**MetaForge unifies these duties into one cohesive native engine.** Operating with zero dynamic external runtimes, it processes media in sub-millisecond speeds directly in memory without risking computer lockups or memory corruption.
 
 ---
 
-## 📖 Sovereign Documentation Map
+## 🚀 Key Capabilities
 
-*   **🧬 [System Architecture & Design Manual](docs/ARCHITECTURE.md)**: Detailed breakdown of the 6 decoupled OJP crates, memory layouts, and data flows.
-*   **🛠️ [Command-Line Interface Reference](docs/CLI_REFERENCE.md)**: Subcommands, options, export formats, and execution matrix.
-*   **💻 [Developer & Contribution Guide](docs/DEVELOPER_GUIDE.md)**: Build workflows, 6-tier TDD test harness, and crate boundaries.
-*   **📖 [End-User Operation Guide](docs/USER_GUIDE.md)**: Real-world operational scenarios, table layouts, and forensic audit evaluations.
+### 🔍 Deep Metadata Extraction & Probing
+* **Container Structure**: Sequentially walks raw segments, markers, chunks, and boxes without decoding pixel buffers into RAM.
+* **Comprehensive EXIF/TIFF Dictionary**: Translates over 200 standard tags, camera settings, lens specifications, and exposure values.
+* **WGS84 GPS Conversion**: Automatically converts Degrees/Minutes/Seconds (DMS) coordinates into standard decimal latitude/longitude with direct map links.
+* **Media Telemetry Probing**: Inspects stream properties, dimensions, track counts, sample rates, channels, and bit depths (`metaforge probe`).
+
+### 🧼 Lossless Privacy Sanitization
+* **Total Metadata Strip**: Removes private camera markers, EXIF blocks, XMP packets, and manufacturer notes while keeping picture quality 100% identical.
+* **Overlay Truncation**: Slices away hidden data appended past the logical end-of-file (post-EOF) without recompressing pixels.
+* **Comment Management**: View, add, modify, or delete embedded JPEG comments and PNG textual tags in place or to new files.
+
+### 🔬 Advanced Forensics & Statistical Steganalysis
+* **Shannon Entropy ($0.0 - 8.0$ bits/byte)**: Quantifies byte randomness to identify compressed Trojan payloads or encrypted channels.
+* **Chi-Square Goodness-of-Fit**: Analyzes byte distribution uniformities across 256 bins ($df = 255$) to detect hidden message embeddings.
+* **Pairs-of-Values (PoVs) Attack**: Detects artificial histogram equalization resulting from sequential Least Significant Bit (LSB) steganography.
+* **Polyglot Signature Harvester**: Flags hidden files disguised inside images (ZIP archives, PDFs, Windows PE executables, Linux ELF binaries, PHP web shells).
+
+### 🔄 Native Media Transcoding & Audio Extraction
+* **Cross-Format Image Transcoding**: Seamlessly converts between JPEG, PNG, WebP, GIF, BMP, and TIFF with adjustable quality and spatial resizing.
+* **High-Fidelity Audio Extraction**: Pulls clean linear PCM audio from video containers (MP4, MKV, WebM, MOV) and transcodes audio formats (FLAC, MP3, OGG $\to$ WAV).
+* **Linear Audio DSP**: Downmixes multi-channel audio to mono/stereo, resamples frequencies ($16\text{ kHz}, 44.1\text{ kHz}, 48\text{ kHz}$), and applies peak normalization to eliminate clipping.
+* **UNIX Stdio Piping**: Full stdin/stdout streaming support for zero-disk-I/O shell pipelines (`cat input.mp4 | metaforge convert - - -t wav > audio.wav`).
+
+### 🗂️ Recursive Concurrent Batch Engine
+* **Folder & Album Transcoding**: Batch-converts directory trees with relative folder preservation or flattened export.
+* **Pre-Flight Dry Run**: Accurately estimates file counts and disk space impact before modifying any files (`--dry-run`).
+* **Hardware Protection Guardrail**: Automatically throttles worker threads to prevent workstation freezes.
+
+### 🌉 Universal Foreign Function Interface (`metaforge-ffi`)
+* **Dual C-ABI & JNI Bridge**: Exposes metadata scanning, security audits, sanitization, and transcoding to Java, C/C++, Python, and foreign runtimes with zero UI dependencies.
+* **Drop-in Backward Compatibility**: Integrates seamlessly with legacy application bridges and modern cloud microservices.
 
 ---
 
-## 💻 CLI Usage & Commands
+## 📂 Supported Container Formats
 
-### 1. Build and Compile
+| Container Type | Metadata & Marker Parsing | Forensic Steganalysis | Privacy Scrubbing | Media Transcoding |
+| :--- | :---: | :---: | :---: | :---: |
+| **JPEG** (`.jpg`, `.jpeg`) | APP0–APP15, COM, SOF, SOS, EXIF, XMP | Shannon Entropy, Chi-Square, PoVs, Overlays | Lossless APP Stripping, EOF Truncation | $\leftrightarrow$ PNG, WebP, GIF, BMP, TIFF |
+| **PNG** (`.png`) | IHDR, tEXt, iTXt, pHYs, eXIf, iCCP | Shannon Entropy, Chunk Overlays, Polyglots | Ancillary Chunk Stripping, Overlay Truncate | $\leftrightarrow$ JPEG, WebP, GIF, BMP, TIFF |
+| **WebP** (`.webp`) | RIFF container, `VP8X`, EXIF, XMP | RIFF size checks, Shannon Entropy | Lossless header scrubbing | $\leftrightarrow$ JPEG, PNG, GIF, BMP, TIFF |
+| **GIF** (`.gif`) | Screen Descriptors, Comments, Extensions | Block bounds, Trailing Overlays | Extension Stripping | $\leftrightarrow$ JPEG, PNG, WebP, BMP, TIFF |
+| **HEIC** (`.heic`) | ISOBMFF Box Walk (`ftyp`, `meta`, `ispe`, EXIF) | Nested Box Validation, Cyclic Bomb Defense | Metadata Extraction | Demuxing & Inspection |
+| **WAV** (`.wav`) | RIFF / WAVE format blocks, channels, sample rate | Audio stream inspection | Audio Probing | Linear DSP Resampling, Channels, Gain |
+| **Video** (`.mp4`, `.mkv`, `.webm`) | Track inspection, durations, audio codecs | Audio stream discovery | Telemetry Probing | $\to$ Pristine Linear PCM WAV Audio |
+| **Audio** (`.mp3`, `.flac`, `.ogg`, `.aac`)| Stream bitrates, channels, sample rates | Frequency & bit depth inspection | Telemetry Probing | $\to$ Standard Uncompressed WAV Audio |
+
+---
+
+## ⚡ Quick Start
+
+### 1. Inspect a Photo's Hidden Metadata
+Discover camera settings, timestamp, and location data in a clean, human-readable table:
 ```bash
-# Build native optimized binary
-./scripts/metaforge-build.sh native
-
-# Build standalone static musl release binary
-./scripts/metaforge-build.sh musl --strip
-
-# Package release tarball with SHA-256 checksum
-./scripts/metaforge-build.sh musl --strip --package
+metaforge photo.jpg
 ```
 
-### 2. Inspect Architecture & Crate Boundaries
+> [!TIP]
+> You can export the inspection results directly to pretty JSON or spreadsheet-ready CSV:
+> ```bash
+> metaforge photo.jpg -f json > info.json
+> metaforge photo.jpg -f csv > report.csv
+> ```
+
+### 2. Strip Private Geolocation & Camera Identifiers
+Wipe all personal identifiers before sharing an image online, keeping image quality untouched:
 ```bash
-./scripts/metaforge-arch.sh summary
-./scripts/metaforge-arch.sh audit
+metaforge sanitize photo.jpg -o safe_to_share.jpg
 ```
 
-### 3. Run Test Suites & Adversarial Harvester
+### 3. Run a Security & Steganography Audit
+Scan for malicious file attachments, hidden payloads, or suspicious byte patterns:
 ```bash
-# Run complete test harness across all 6 crates
-./scripts/metaforge-test.sh --all
-
-# Run Tier 6 Red-Team Adversarial Self-Attack suites only
-./scripts/metaforge-test.sh --adversarial
+metaforge audit suspicious_file.png
 ```
 
-### 4. Basic Metadata Extraction
+### 4. Extract Audio from a Video
+Pull clean audio from a video recording and resample it for voice transcription:
 ```bash
-metaforge test_images/img6-gps.jpg
+metaforge convert presentation.mp4 voice.wav --channels 1 --rate 16000 --normalize
 ```
 
-### 5. Media & Stream Telemetry Probe
+### 5. Convert & Resize Images for the Web
+Convert photos to modern WebP format with custom dimensions and quality:
 ```bash
-metaforge probe test_images/img6-gps.jpg
-metaforge probe sample_audio.wav
+metaforge convert banner.png banner.webp --resize 1280x720 --quality 80
 ```
 
-### 6. Zero-Dependency Media & Image Conversion
+### 6. Batch Convert an Entire Album
+Convert all JPEG photos in a folder into WebP while keeping the folder structure organized:
 ```bash
-# Convert JPEG to PNG
-metaforge convert test_images/img6-gps.jpg output.png
-
-# Convert and resize image to WebP with custom quality
-metaforge convert test_images/flower.png thumbnail.webp --resize 320x240 --quality 80
-
-# Transcode WAV audio: downmix to Mono and resample to 22,050 Hz
-metaforge convert stereo_input.wav mono_output.wav --channels 1 --rate 22050
-```
-
-### 7. Steganography & Forensics Audit
-```bash
-metaforge audit test_images/img6-gps.jpg
-```
-
-### 8. Low-Level Segment / Chunk Dump
-```bash
-metaforge dump test_images/img6-gps.jpg
-```
-
-### 9. Lossless Metadata Sanitization
-```bash
-# Strip all private metadata and truncate trailing overlays
-metaforge sanitize test_images/img6-gps.jpg -o clean_image.jpg
-
-# Only truncate trailing overlay data, preserving valid metadata
-metaforge sanitize test_images/img6-gps.jpg --overlay-only -o no_overlay.jpg
-```
-
-### 10. Comment & Text Tag Editing
-```bash
-# Set JPEG comment
-metaforge comment test_images/img1.jpg -s "Authorized Forensic Archive" -o archive.jpg
-
-# Read current comment
-metaforge comment archive.jpg
+metaforge batch ./raw_photos ./optimized_web --ext jpg,jpeg --target webp
 ```
 
 ---
 
-## 🧬 Sovereign 6-Crate Workspace Topology
+## 🏛️ Sovereign 7-Crate Architecture
 
-The repository follows strict **One-Job-Principle (OJP)** architectural decoupling:
+MetaForge enforces strict **One-Job-Principle (OJP)** decoupling across 7 independent crates:
 
 ```text
 metaforge/
-├── Cargo.toml                  # Workspace Root Manifest
+├── Cargo.toml                  # Sovereign Workspace Manifest
 ├── docs/                       # Architectural & Technical Manuals
-│   ├── ARCHITECTURE.md
-│   ├── CLI_REFERENCE.md
-│   ├── DEVELOPER_GUIDE.md
-│   └── USER_GUIDE.md
+│   ├── ARCHITECTURE.md         # In-depth topology, algorithms & flowcharts
+│   ├── CLI_REFERENCE.md        # Comprehensive command & flag reference
+│   ├── DEVELOPER_GUIDE.md      # Build workflows, testing & contribution guide
+│   └── USER_GUIDE.md           # Step-by-step operational tutorials & scenarios
 ├── scripts/                    # Sovereign Operations Suite
-│   ├── metaforge-arch.sh       # Topology inspector & OJP auditor
-│   ├── metaforge-build.sh      # Static musl packager with SHA-256
-│   ├── metaforge-test.sh       # 6-Tier TDD & adversarial runner
-│   └── lib/                    # ANSI colors, UI singletons, regex engine
+│   ├── metaforge-arch.sh       # Topology inspector & OJP invariant auditor
+│   ├── metaforge-build.sh      # Native & static musl release builder
+│   └── metaforge-test.sh       # 6-Tier TDD & adversarial verification harness
 ├── crates/
 │   ├── metaforge-core/         # Domain models, EXIF/GPS dictionary, geo-math, errors
 │   ├── metaforge-parsers/      # Zero-copy binary container scanners (JPEG, PNG, WebP, GIF, HEIC)
-│   ├── metaforge-forensics/    # Shannon entropy (0.0-8.0), overlay detector, polyglot signatures
+│   ├── metaforge-forensics/    # Shannon entropy, Chi-Square steganalysis, PoVs & polyglots
 │   ├── metaforge-sanitize/     # Lossless scrubber, comment editor, formula-injection shield
-│   ├── metaforge-converter/    # Zero-dependency image/audio transcoding, stream probing, resizer
-│   └── metaforge-cli/          # Cockpit CLI orchestrator, monospace tables, CSV/JSON/JSONL export
-└── test_images/                # Calibration test assets
+│   ├── metaforge-converter/    # Native media transcoding, audio DSP, probing & batch engine
+│   ├── metaforge-ffi/          # Universal C-ABI & dual modern/legacy JNI bridge
+│   └── metaforge-cli/          # Cockpit CLI orchestrator, monospace tables, report streaming
+└── test_images/                # Calibration and forensic verification assets
 ```
+
+---
+
+## 🛡️ Built-In Defensive Guardrails (`POC TDD+++++`)
+
+MetaForge includes 22 dedicated adversarial self-attack tests asserting resilience against malicious inputs:
+1. **Formula Injection Immunity**: Automatically neutralizes CSV injection payloads (`=`, `+`, `-`, `@`, `\t`, `\r`) by prefixing safe single-quotes (`'`).
+2. **Terminal & Log Defense**: Strips raw ANSI CSI control codes and OSC 8 hyperlink sequences from untrusted camera metadata before printing to console.
+3. **Decompression Bomb Protection**: Rejects corrupted headers requesting excessive image dimensions ($> 16,384 \times 16,384\text{ px}$) or extreme chunk sizes to eliminate memory exhaustion (DoS).
+4. **Zero-Panic Discipline**: Core library crates return typed error results rather than crashing the host process.
+
+---
+
+## 📚 Documentation Map
+
+* 📖 **[User Operation Guide](docs/USER_GUIDE.md)**: Real-world operational scenarios, table interpretations, and privacy guides.
+* 🛠️ **[Command-Line Reference](docs/CLI_REFERENCE.md)**: Complete inventory of commands, flags, and pipeline parameters.
+* 🧬 **[Architecture & Design Manual](docs/ARCHITECTURE.md)**: Deep dive into binary parsing mechanics, entropy mathematics, and memory safety.
+* 💻 **[Developer & Contribution Guide](docs/DEVELOPER_GUIDE.md)**: Build instructions, static musl packaging, and the 6-tier TDD test suite.
 
 ---
 

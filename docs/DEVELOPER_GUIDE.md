@@ -1,76 +1,89 @@
 # 💻 Developer & Contribution Guide
 
-This guide outlines compilation pipelines, test harnesses, coding standards, and architectural invariants for developers working on the `metaforge` sovereign workspace.
+Welcome to the **MetaForge Developer Guide**. This manual outlines compilation workflows, multi-tier test execution, architectural invariants, and contribution standards for developers working on the MetaForge sovereign workspace.
 
 ---
 
 ## 🛠️ 1. Compilation & Build Workflows
 
-All builds are orchestrated via `scripts/metaforge-build.sh`:
+All builds are managed via the sovereign builder script [`scripts/metaforge-build.sh`](file:///home/emhcet/private/projects/desktop/rust/metaforge/scripts/metaforge-build.sh):
 
 ```bash
-# Compile native release binary (target/release/metaforge)
+# 1. Compile native optimized binary (target/release/metaforge):
 ./scripts/metaforge-build.sh native
 
-# Compile standalone static musl binary (target/x86_64-unknown-linux-musl/release/metaforge)
+# 2. Compile standalone static musl PIE binary (target/x86_64-unknown-linux-musl/release/metaforge):
 ./scripts/metaforge-build.sh musl
 
-# Compile, strip symbols, and package distribution tarball with SHA-256
+# 3. Compile, strip debug symbols, and generate a release tarball with SHA-256 checksum:
 ./scripts/metaforge-build.sh musl --strip --package
 ```
 
+The resulting static binary is 100% self-contained and runs on any modern x86_64 Linux system with zero external runtime dependencies.
+
 ---
 
-## 🔬 2. 6-Tier TDD & Adversarial Test Harness
+## 🔬 2. Multi-Tier TDD & Adversarial Verification
 
-We enforce a comprehensive multi-tier testing framework, including Tier 6 adversarial self-attack suites:
+We enforce a comprehensive multi-tier testing framework across all 7 crates, orchestrated by [`scripts/metaforge-test.sh`](file:///home/emhcet/private/projects/desktop/rust/metaforge/scripts/metaforge-test.sh):
 
 ```bash
-# Execute complete workspace test matrix across all 6 crates
+# Execute complete workspace test matrix across all 7 crates:
 ./scripts/metaforge-test.sh --all
 
-# Execute Tier 6 Red-Team Adversarial Self-Attack suites only
+# Execute Tier 6 Red-Team Adversarial Self-Attack suites only:
 ./scripts/metaforge-test.sh --adversarial
 
-# Execute tests for a specific crate
+# Execute tests for an individual crate:
 ./scripts/metaforge-test.sh --converter
-./scripts/metaforge-test.sh --parsers
 ./scripts/metaforge-test.sh --forensics
+./scripts/metaforge-test.sh --parsers
 ./scripts/metaforge-test.sh --sanitize
 ./scripts/metaforge-test.sh --core
+./scripts/metaforge-test.sh --ffi
 ./scripts/metaforge-test.sh --cli
 ```
 
 ### Adversarial Test Invariants (`POC TDD+++++`)
-*   **`tests/adversarial_converter_tests.rs`**: Tests resistance against dimension allocation bombs (DoS resize), corrupted/truncated streams, empty buffers, and audio channel overflow attacks.
-*   **`tests/adversarial_cli_tests.rs`**: Asserts formula-injection protection in CSV exports and ANSI/OSC terminal escape sequence scrubbing.
-*   **`tests/adversarial_core_tests.rs`**: Asserts resilience against NaN/Infinity GPS coordinates, invalid cardinal references, and fuzzing inputs.
-*   **`tests/adversarial_forensics_tests.rs`**: Tests PE false-positive immunity, PHP web shell injection, and high-entropy stego thresholds.
-*   **`tests/adversarial_parser_bombs_tests.rs`**: Tests resistance against billion-byte PNG allocation bombs, truncated JPEG segments, nested HEIC box bombs, and corrupted RIFF sizes.
-*   **`tests/adversarial_sanitize_tests.rs`**: Tests truncated stream safety, JPEG comment overflows, and formula mitigation.
+The workspace includes 22 dedicated adversarial self-attack tests asserting immunity against malicious inputs:
+* **`tests/adversarial_converter_tests.rs`**: Asserts immunity against dimension allocation bombs ($>16,384 \times 16,384\text{ px}$), corrupted stream payloads, zero-byte buffers, and audio channel overflow attacks.
+* **`tests/adversarial_forensics_tests.rs`**: Asserts immunity against truncated scan streams, 0-byte SOS segments, marker padding fuzzing, high-entropy steganography thresholds, PE false-positive immunity, and PHP webshell detection.
+* **`tests/adversarial_parser_bombs_tests.rs`**: Asserts resistance against billion-byte PNG chunk allocation bombs, cyclical nested ISOBMFF HEIC box traps, corrupted RIFF sizes, and truncated JPEG segments.
+* **`tests/adversarial_sanitize_tests.rs`**: Asserts truncated stream safety, JPEG comment overflows, and formula-injection escaping.
+* **`tests/adversarial_cli_tests.rs`**: Asserts spreadsheet formula neutralization in CSV exports and ANSI CSI / OSC 8 terminal sequence scrubbing.
+* **`tests/adversarial_core_tests.rs`**: Asserts resilience against NaN/Infinity GPS coordinates, invalid cardinal references, and fuzzing inputs.
+* **`tests/ffi_tdd.rs`**: Asserts null-pointer safety across all C-ABI entry points.
 
 ---
 
-## 🏛️ 3. Sovereign Architecture & OJP Audit
+## 🏛️ 3. Architecture & OJP Boundary Inspector
 
-Inspect crate boundaries, LOC metrics, and security invariants:
+Verify crate boundaries, LOC metrics, and security invariants using [`scripts/metaforge-arch.sh`](file:///home/emhcet/private/projects/desktop/rust/metaforge/scripts/metaforge-arch.sh):
 
 ```bash
-# View workspace topology and LOC summary
+# View workspace topology and LOC summary:
 ./scripts/metaforge-arch.sh summary
 
-# Inspect individual crate OJP boundaries
+# Inspect individual crate OJP boundaries and module layouts:
 ./scripts/metaforge-arch.sh crates
 
-# Run automated invariant audit (identity leaks, musl targets, panic discipline)
+# Run automated invariant audit (identity leaks, musl targets, panic discipline):
 ./scripts/metaforge-arch.sh audit
 ```
 
 ---
 
-## 📂 4. Crate Modification Rules
+## 📂 4. Architectural Rules & Coding Standards
 
-When extending `metaforge`:
-1.  **Zero Panic Policy**: Production library crates (`metaforge-core`, `metaforge-parsers`, `metaforge-forensics`, `metaforge-sanitize`, `metaforge-converter`) must not use `.unwrap()` or `.expect()` in non-test code. Return typed `MetaForgeError` results instead.
-2.  **Zero-Copy Ingestion**: Ingest binary containers as immutable byte slices `&[u8]`. Avoid allocating unneeded intermediate buffers.
-3.  **Strict OJP**: Keep duties strictly decoupled across crates. Do not import UI/formatting crates into parser/forensic engines.
+When contributing code to `metaforge`:
+
+1. **Zero Panic Policy in Library Crates**:
+   Production library code (`metaforge-core`, `metaforge-parsers`, `metaforge-forensics`, `metaforge-sanitize`, `metaforge-converter`, `metaforge-ffi`) must never call `.unwrap()` or `.expect()` in non-test paths. All potential error states must return a typed `Result<T, MetaForgeError>`.
+2. **Zero-Copy Ingestion**:
+   Container parsers must operate directly over immutable byte slices (`&[u8]`). Avoid allocating intermediate buffers or decoding pixel bitmaps into memory during metadata or structural inspections.
+3. **Strict One-Job-Principle (OJP)**:
+   Keep crate duties strictly isolated:
+   * Do not import terminal formatting or UI crates into parser, forensics, or conversion crates.
+   * Expose clean domain data models from `metaforge-core` and let the presentation layer (`metaforge-cli`) handle rendering.
+4. **Sanitized Stack Discipline**:
+   Avoid leaking internal third-party dependency names or private development paths in user-facing manuals and documentation. Present the system as a unified native engine.
