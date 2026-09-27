@@ -475,7 +475,7 @@ checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
 name = "metaforge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "comfy-table",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "metaforge-converter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hound",
  "image",
@@ -508,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "metaforge-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -518,7 +518,7 @@ dependencies = [
 
 [[package]]
 name = "metaforge-ffi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "jni",
  "libc",
@@ -534,7 +534,7 @@ dependencies = [
 
 [[package]]
 name = "metaforge-forensics"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "metaforge-core",
  "serde",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "metaforge-parsers"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kamadak-exif",
  "metaforge-core",
@@ -557,7 +557,7 @@ dependencies = [
 
 [[package]]
 name = "metaforge-sanitize"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "metaforge-core",
  "metaforge-parsers",

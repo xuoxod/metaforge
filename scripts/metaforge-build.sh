@@ -136,7 +136,7 @@ build_musl() {
 package_dist() {
     ui_section "Packaging Sovereign Release Artifacts"
     mkdir -p dist
-    local version="v0.1.0"
+    local version="v$(grep -m1 '^version =' "${ROOT_DIR}/crates/metaforge-cli/Cargo.toml" | cut -d'"' -f2)"
     
     local musl_bin="target/x86_64-unknown-linux-musl/release/metaforge"
     [ ! -f "$musl_bin" ] && musl_bin="target/x86_64-unknown-linux-musl/release/jpeg_meta_rs"
