@@ -29,6 +29,7 @@ TEST SUITE SELECTION:
   --sanitize        Test metaforge-sanitize crate only
   --converter       Test metaforge-converter crate only
   --cli             Test metaforge-cli crate only
+  --ffi             Test metaforge-ffi crate only
 
 OPTIONS:
   -j, --jobs <N>    Number of parallel cargo test jobs [default: 4]
@@ -53,7 +54,7 @@ VERBOSE=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --all|--adversarial|--unit|--core|--parsers|--forensics|--sanitize|--converter|--cli)
+        --all|--adversarial|--unit|--core|--parsers|--forensics|--sanitize|--converter|--cli|--ffi)
             MODE="${1#--}"
             shift
             ;;
@@ -149,7 +150,7 @@ case "$MODE" in
             FAILED=$(( FAILED + 1 ))
         fi
         ;;
-    core|parsers|forensics|sanitize|converter|cli)
+    core|parsers|forensics|sanitize|converter|cli|ffi)
         pkg="metaforge-$MODE"
         [ "$MODE" = "cli" ] && pkg="metaforge"
         ui_info "Executing crate test suite: $pkg..."

@@ -143,7 +143,12 @@ package_dist() {
 
     if [ -f "$musl_bin" ]; then
         local tarball="dist/metaforge-${version}-x86_64-unknown-linux-musl.tar.gz"
-        tar -czf "$tarball" -C "$(dirname "$musl_bin")" "$(basename "$musl_bin")"
+        local files=("$(basename "$musl_bin")")
+        local bin_dir
+        bin_dir="$(dirname "$musl_bin")"
+        [ -f "${bin_dir}/libmetaforge_ffi.so" ] && files+=("libmetaforge_ffi.so")
+        [ -f "${bin_dir}/libmetaforge_ffi.a" ] && files+=("libmetaforge_ffi.a")
+        tar -czf "$tarball" -C "$bin_dir" "${files[@]}"
         (cd dist && sha256sum "$(basename "$tarball")" > "$(basename "$tarball").sha256")
         ui_success "Created: $tarball ($(du -h "$tarball" | cut -f1))"
         ui_kv "SHA-256" "$(cat "${tarball}.sha256" | cut -d' ' -f1)"

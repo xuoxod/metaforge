@@ -13,7 +13,9 @@ use metaforge_converter::{
     ImageTargetFormat,
 };
 use metaforge_core::{ContainerType, MetadataEntry, MetaForgeError, TagCategory};
-use metaforge_forensics::{calculate_shannon_entropy, detect_overlay, scan_embedded_payloads};
+use metaforge_forensics::{
+    analyze_jpeg_steganography, calculate_shannon_entropy, detect_overlay, scan_embedded_payloads,
+};
 use metaforge_parsers::{
     detect_container_type, parse_gif, parse_heic, parse_jpeg, parse_png, parse_webp,
 };
@@ -345,7 +347,20 @@ fn execute_audit(args: &AuditArgs, _format: OutputFormat) -> Result<(), MetaForg
     let overlay = detect_overlay(&bytes, official_end_offset);
     let payloads = scan_embedded_payloads(&bytes, official_end_offset);
 
-    let output = table::render_audit_table(&file_str, entropy, is_suspicious_entropy, &overlay, &payloads);
+    let stego = if container == ContainerType::Jpeg {
+        Some(analyze_jpeg_steganography(&bytes))
+    } else {
+        None
+    };
+
+    let output = table::render_audit_table(
+        &file_str,
+        entropy,
+        is_suspicious_entropy,
+        &overlay,
+        &payloads,
+        stego.as_ref(),
+    );
     println!("{}", output);
 
     Ok(())

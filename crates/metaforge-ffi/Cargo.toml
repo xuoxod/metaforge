@@ -1,0 +1,24 @@
+[package]
+name = "metaforge-ffi"
+version = "0.1.0"
+edition = "2021"
+authors = ["RMediaTech Contributors <contact@rmediatech.com>"]
+license = "MIT"
+description = "Universal C-ABI and JNI Foreign Function Interface bridge for MetaForge"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+metaforge-core = { path = "../metaforge-core" }
+metaforge-parsers = { path = "../metaforge-parsers" }
+metaforge-forensics = { path = "../metaforge-forensics" }
+metaforge-sanitize = { path = "../metaforge-sanitize" }
+metaforge-converter = { path = "../metaforge-converter" }
+jni = "0.21.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.6"

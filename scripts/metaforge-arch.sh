@@ -119,10 +119,11 @@ EOF
             case "$cname" in
                 metaforge-core|core) role="Types, EXIF Dictionary, Geo & Errors" ;;
                 metaforge-parsers|parsers) role="Zero-Copy Container Segment Walkers" ;;
-                metaforge-forensics|forensics) role="Shannon Entropy & Polyglot Scanner" ;;
+                metaforge-forensics|forensics) role="Shannon Entropy, Steganalysis & Polyglots" ;;
                 metaforge-sanitize|sanitize) role="Metadata Scrubber & Lossless Editor" ;;
-                metaforge-converter|converter) role="Zero-Copy Image & Audio Transcoder" ;;
+                metaforge-converter|converter) role="Universal Media Decoder, DSP & Batch" ;;
                 metaforge-cli|cli|src) role="Cockpit CLI, Tables & Report Stream" ;;
+                metaforge-ffi|ffi) role="Universal C-ABI & JNI Bridge" ;;
                 utils) role="Legacy Utils (Scaffold Target)" ;;
             esac
             printf "  %-22s %-32s %'10d\n" "$cname" "$role" "$loc"
@@ -139,10 +140,11 @@ cmd_crates() {
     local crates=(
         "metaforge-core:Domain models, 200+ EXIF tag mappings, GPS geo-math, typed error definitions. Zero parser logic."
         "metaforge-parsers:Zero-copy binary segment/chunk walkers for JPEG, PNG, WebP, GIF, HEIC. Zero terminal formatting."
-        "metaforge-forensics:Shannon entropy calculation (0.0-8.0), EOF overlay detection, polyglot signature scanner. Zero bitmap decoding."
+        "metaforge-forensics:Shannon entropy calculation (0.0-8.0), Chi-Square steganalysis & PoVs, EOF overlay detection, polyglot signature scanner. Zero bitmap decoding."
         "metaforge-sanitize:Lossless in-memory metadata scrubbing, comment insertion/deletion, PNG chunk updating, CRC32. Zero image recompression."
-        "metaforge-converter:Zero-dependency multi-format image (JPEG/PNG/WebP/BMP/TIFF) & audio (WAV) transcoding, stream probing, and resize/quality engine."
-        "metaforge-cli:Unified command-line interface, rich UTF-8 monospace tables, formula-shielded exports. Zero raw parsing."
+        "metaforge-converter:Zero-dependency multi-format image & audio/video container demuxing/transcoding, DSP filters, stream probing, and recursive batch engine."
+        "metaforge-cli:Unified command-line interface, rich UTF-8 monospace tables, formula-shielded exports, streaming pipes. Zero raw parsing."
+        "metaforge-ffi:Universal C-ABI and JNI Foreign Function Interface bridge exposing parsers, forensics, sanitizer, and converter to Java, C, Python, and external runtimes. Zero UI logic."
     )
 
     for item in "${crates[@]}"; do

@@ -3,7 +3,7 @@ use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Row, Table};
 use metaforge_core::MetadataEntry;
-use metaforge_forensics::{EmbeddedPayload, OverlayInfo};
+use metaforge_forensics::{EmbeddedPayload, OverlayInfo, SteganalysisReport};
 
 /// Scrubs raw ANSI CSI escape codes, OSC sequences, and unprintable controls
 /// to prevent terminal display hijacking and log poisoning attacks.
@@ -87,6 +87,7 @@ pub fn render_audit_table(
     is_suspicious_entropy: bool,
     overlay: &OverlayInfo,
     payloads: &[EmbeddedPayload],
+    stego: Option<&SteganalysisReport>,
 ) -> String {
     let mut output = String::new();
     output.push_str(&format!("\n🛡️  Sovereign Forensics & Steganography Audit: {}\n", file_path));
@@ -140,7 +141,55 @@ pub fn render_audit_table(
         payload_verdict,
     ]));
 
+    if let Some(st) = stego {
+        let stego_verdict = if st.is_suspicious {
+            Cell::new(format!("ALERT ({} Anomalies)", st.findings.len())).fg(Color::Red)
+        } else {
+            Cell::new("CLEAN (Chi-Square Verified)").fg(Color::Green)
+        };
+
+        summary_table.add_row(Row::from(vec![
+            Cell::new("Chi-Square Steganalysis"),
+            Cell::new(format!(
+                "Stat: {:.2} (df={}, p={:.4}) | Scan: {} B",
+                st.chi_square_stat, st.degrees_of_freedom, st.p_value_approx, st.scan_data_bytes
+            )),
+            stego_verdict,
+        ]));
+    }
+
     output.push_str(&format!("{}\n", summary_table));
+
+    if let Some(st) = stego {
+        if !st.findings.is_empty() {
+            output.push_str("\n🔍 Steganalysis Anomalies & Statistical Deviations:\n");
+            let mut stable = Table::new();
+            stable
+                .load_preset(UTF8_FULL)
+                .apply_modifier(UTF8_ROUND_CORNERS)
+                .set_header(vec![
+                    Cell::new("Category").fg(Color::Cyan),
+                    Cell::new("Severity").fg(Color::Yellow),
+                    Cell::new("Observation").fg(Color::White),
+                ]);
+
+            for f in &st.findings {
+                let sev_cell = match f.severity {
+                    metaforge_forensics::FindingSeverity::Info => Cell::new("INFO").fg(Color::Blue),
+                    metaforge_forensics::FindingSeverity::Low => Cell::new("LOW").fg(Color::Yellow),
+                    metaforge_forensics::FindingSeverity::Medium => Cell::new("MEDIUM").fg(Color::Red),
+                    metaforge_forensics::FindingSeverity::High => Cell::new("HIGH").fg(Color::Red),
+                    metaforge_forensics::FindingSeverity::Critical => Cell::new("CRITICAL").fg(Color::Red),
+                };
+                stable.add_row(Row::from(vec![
+                    Cell::new(format!("{:?}", f.finding_type)),
+                    sev_cell,
+                    Cell::new(scrub_terminal_poisoning(&f.description)),
+                ]));
+            }
+            output.push_str(&format!("{}\n", stable));
+        }
+    }
 
     if !payloads.is_empty() {
         output.push_str("\n🚨 Detected Signatures & Payloads:\n");

@@ -39,3 +39,30 @@ fn test_adversarial_high_entropy_steganography_threshold() {
     let crypto_ent = calculate_shannon_entropy(&crypto_stream);
     assert!(is_suspicious_entropy(crypto_ent));
 }
+
+#[test]
+fn test_adversarial_steganalysis_truncated_streams_and_fuzzing() {
+    use metaforge_forensics::analyze_jpeg_steganography;
+
+    // 1. Truncated stream directly at SOS marker
+    let truncated = [0xFF, 0xD8, 0xFF, 0xDA];
+    let report = analyze_jpeg_steganography(&truncated);
+    assert_eq!(report.scan_data_bytes, 0);
+
+    // 2. SOS marker with overflow header length
+    let corrupt_header = [0xFF, 0xD8, 0xFF, 0xDA, 0xFF, 0xFF, 0x01, 0x02];
+    let report = analyze_jpeg_steganography(&corrupt_header);
+    assert_eq!(report.scan_data_bytes, 0);
+
+    // 3. Endless 0xFF padding fuzzing
+    let mut flood = vec![0xFF; 5000];
+    flood[0] = 0xFF;
+    flood[1] = 0xD8;
+    flood[2] = 0xFF;
+    flood[3] = 0xDA;
+    flood[4] = 0x00;
+    flood[5] = 0x02; // header length 2
+    let report = analyze_jpeg_steganography(&flood);
+    // Should safely terminate without panic or hanging
+    assert!(report.scan_data_bytes <= flood.len());
+}
