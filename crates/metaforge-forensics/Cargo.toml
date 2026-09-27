@@ -1,0 +1,16 @@
+[package]
+name = "metaforge-forensics"
+version = "0.1.0"
+edition = "2021"
+authors = ["RMediaTech Contributors <contact@rmediatech.com>"]
+license = "MIT"
+description = "Steganography, Shannon entropy, and malicious polyglot forensics engine for MetaForge"
+
+[dependencies]
+metaforge-core = { path = "../metaforge-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.6"

@@ -1,0 +1,15 @@
+[package]
+name = "metaforge-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["RMediaTech Contributors <contact@rmediatech.com>"]
+license = "MIT"
+description = "Core domain types, EXIF/GPS tag dictionary, geo-math, and errors for MetaForge"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.6"

@@ -1,0 +1,15 @@
+[package]
+name = "metaforge-sanitize"
+version = "0.1.0"
+edition = "2021"
+authors = ["RMediaTech Contributors <contact@rmediatech.com>"]
+license = "MIT"
+description = "Privacy scrubbing, overlay truncation, and metadata editing engine for MetaForge"
+
+[dependencies]
+metaforge-core = { path = "../metaforge-core" }
+metaforge-parsers = { path = "../metaforge-parsers" }
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.6"
