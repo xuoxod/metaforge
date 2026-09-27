@@ -1,32 +1,35 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
+/// MetaForge: Sovereign High-Precision Image & Media Transcoder, Forensics & Metadata Engine
 #[derive(Parser, Debug)]
 #[command(
     name = "metaforge",
     author = "RMediaTech Contributors <contact@rmediatech.com>",
-    version = "0.1.0",
-    about = "Sovereign High-Performance Image Metadata Extraction, Forensic Steganography & Privacy Sanitization Engine",
-    long_about = "A unified, zero-dependency sovereign toolkit for extracting, forensically auditing, editing, and scrubbing metadata across JPEG, PNG, WebP, GIF, and HEIC containers."
+    version,
+    about = "Zero-dependency pure-Rust multi-format image & media transcoder, forensics auditor and metadata scrubber",
+    long_about = "MetaForge delivers mathematically sound, microsecond binary parsing, lossless sanitization, \
+                  steganography detection, multi-format media transcoding (MP4, MKV, MP3, FLAC, OGG, WAV, WebP, PNG, JPEG), \
+                  and batch directory conversion with zero C/FFI runtime dependencies."
 )]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    /// Target image file to scan (default command if no subcommand provided)
+    /// Target file to scan when no subcommand is given
     #[arg(value_name = "FILE")]
     pub file: Option<PathBuf>,
 
-    /// Output format
-    #[arg(short, long, value_enum, default_value_t = OutputFormat::Table, global = true)]
+    /// Output report format (table, json, jsonl, csv)
+    #[arg(short, long, global = true, value_enum, default_value_t = OutputFormat::Table)]
     pub format: OutputFormat,
 
-    /// Verbose output showing hex offsets and raw byte previews
+    /// Suppress verbose visual headers and process quietly
     #[arg(short, long, global = true)]
-    pub verbose: bool,
+    pub quiet: bool,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputFormat {
     Table,
     Json,
@@ -36,7 +39,7 @@ pub enum OutputFormat {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Scan and extract structured metadata (EXIF, GPS, TIFF, XMP, Dimensions)
+    /// Inspect metadata segments and EXIF/GPS dictionary tags
     Scan(ScanArgs),
 
     /// Perform steganography, Shannon entropy, and malicious polyglot forensics audit
@@ -51,10 +54,13 @@ pub enum Commands {
     /// Dump low-level container segments and chunk hierarchies
     Dump(DumpArgs),
 
-    /// Transcode and convert image and audio containers with resize and quality controls
+    /// Transcode and convert media containers and images with resize, DSP audio and streaming pipe controls
     Convert(ConvertArgs),
 
-    /// Probe media container, audio streams, and image telemetry
+    /// Batch transcode entire directory recursively with concurrency guardrails
+    Batch(BatchArgs),
+
+    /// Probe media container, audio/video streams, and image telemetry
     Probe(ProbeArgs),
 }
 
@@ -135,13 +141,17 @@ pub struct DumpArgs {
 
 #[derive(Args, Debug)]
 pub struct ConvertArgs {
-    /// Input media or image file to convert
+    /// Input media or image file to convert (use '-' for stdin)
     #[arg(value_name = "INPUT")]
     pub input: PathBuf,
 
-    /// Target output file path
+    /// Target output file path (use '-' for stdout)
     #[arg(value_name = "OUTPUT")]
     pub output: PathBuf,
+
+    /// Explicit target format extension (e.g. --target webp, -t wav; required when output is stdout '-')
+    #[arg(short, long)]
+    pub target: Option<String>,
 
     /// Target image quality (1-100, JPEG and WebP only) [default: 85]
     #[arg(short, long, default_value_t = 85)]
@@ -158,6 +168,73 @@ pub struct ConvertArgs {
     /// Target audio channels (1=mono, 2=stereo)
     #[arg(long)]
     pub channels: Option<u16>,
+
+    /// Linear audio gain multiplier (e.g., 1.5)
+    #[arg(long)]
+    pub gain: Option<f32>,
+
+    /// Normalize audio peak to 0.98
+    #[arg(long)]
+    pub normalize: bool,
+
+    /// Perform a dry-run estimation without writing output files
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct BatchArgs {
+    /// Source directory containing input media files
+    #[arg(value_name = "INPUT_DIR")]
+    pub input: PathBuf,
+
+    /// Target destination directory
+    #[arg(value_name = "OUTPUT_DIR")]
+    pub output: PathBuf,
+
+    /// Filter by input file extensions (comma-separated, e.g. "mp4,mp3,flac" or "png,jpg")
+    #[arg(short, long)]
+    pub ext: Option<String>,
+
+    /// Target output format (e.g. "wav", "webp", "png") [default: auto]
+    #[arg(short, long)]
+    pub target: Option<String>,
+
+    /// Max concurrent worker threads (capped at 4 per system rules) [default: 4]
+    #[arg(short, long, default_value_t = 4)]
+    pub workers: usize,
+
+    /// Flatten destination directory rather than mirroring source directory tree
+    #[arg(long)]
+    pub flatten: bool,
+
+    /// Perform dry-run pre-flight check without modifying disk
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Target image quality (1-100) [default: 85]
+    #[arg(short, long, default_value_t = 85)]
+    pub quality: u8,
+
+    /// Resize image to WxH (e.g., "800x600")
+    #[arg(short, long)]
+    pub resize: Option<String>,
+
+    /// Target audio sample rate in Hz
+    #[arg(long)]
+    pub rate: Option<u32>,
+
+    /// Target audio channels (1=mono, 2=stereo)
+    #[arg(long)]
+    pub channels: Option<u16>,
+
+    /// Linear audio gain multiplier
+    #[arg(long)]
+    pub gain: Option<f32>,
+
+    /// Normalize audio peak
+    #[arg(long)]
+    pub normalize: bool,
 }
 
 #[derive(Args, Debug)]
@@ -166,4 +243,3 @@ pub struct ProbeArgs {
     #[arg(value_name = "FILE")]
     pub file: PathBuf,
 }
-

@@ -74,16 +74,14 @@ fn test_adversarial_audio_invalid_channel_counts() {
     // Adversarial channel request: 0 channels
     let opts_zero = AudioConvertOptions {
         target_channels: Some(0),
-        target_sample_rate: None,
-        target_bits_per_sample: None,
+        ..Default::default()
     };
     assert!(convert_audio_wav_bytes(&buf, &opts_zero).is_err());
 
     // Adversarial channel request: 99 channels (exhaustion attack)
     let opts_huge = AudioConvertOptions {
         target_channels: Some(99),
-        target_sample_rate: None,
-        target_bits_per_sample: None,
+        ..Default::default()
     };
     assert!(convert_audio_wav_bytes(&buf, &opts_huge).is_err());
 }

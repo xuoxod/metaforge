@@ -27,14 +27,37 @@ metaforge probe recording.wav
 ---
 
 ### Scenario B: Media & Image Transcoding
-Convert images between JPEG, PNG, WebP, GIF, BMP, and TIFF, or transcode WAV audio:
+Convert images between JPEG, PNG, WebP, GIF, BMP, and TIFF, extract audio from video containers, and transcode audio formats:
 
 ```bash
 # Convert photo to WebP with custom dimensions and quality:
 metaforge convert original.png web_ready.webp --resize 1280x720 --quality 85
 
-# Convert stereo audio recording to mono at 44.1 kHz:
-metaforge convert voice_stereo.wav voice_mono.wav --channels 1 --rate 44100
+# Extract high-fidelity audio from an MP4/MKV video container to WAV:
+metaforge convert presentation.mp4 presentation_audio.wav
+
+# Transcode audio (FLAC/MP3/OGG/WAV) with channel downmixing and peak normalization:
+metaforge convert interview.flac voice_mono.wav --channels 1 --rate 16000 --normalize
+
+# UNIX Stream Piping (stdin to stdout with zero disk I/O):
+cat recording.mp4 | metaforge convert - - -t wav > stream.wav
+cat asset.png | metaforge convert - - -t webp > asset.webp
+```
+
+---
+
+### Scenario C: Concurrent Directory Batch Processing
+Recursively batch convert an entire collection of images or media containers with tree preservation and strict 4-worker concurrency guardrails:
+
+```bash
+# Pre-flight dry run estimation (no disk writes):
+metaforge batch /path/to/raw /path/to/export --ext jpg,png --target webp --dry-run
+
+# Execute batch transcode mirroring directory hierarchy:
+metaforge batch /path/to/raw /path/to/export --ext jpg,png --target webp
+
+# Batch extract audio from all video files into a flattened audio folder:
+metaforge batch /path/to/videos /path/to/audio --ext mp4,mkv,webm --target wav --flatten
 ```
 
 ---

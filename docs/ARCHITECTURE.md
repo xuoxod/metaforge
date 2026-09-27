@@ -34,9 +34,11 @@ graph TD
     end
 
     subgraph Converter ["crates/metaforge-converter"]
-        ImageTranscode["image_transcode.rs"]
-        AudioTranscode["audio_transcode.rs"]
-        Probe["probe.rs"]
+        DspSub["dsp/ (resample, remix, gain, norm)"]
+        CodecsSub["codecs/ (symphonia demux, hound, image)"]
+        PipelineSub["pipeline/ (AudioPipeline, ImagePipeline)"]
+        BatchSub["batch/ (worker pool, recursion, dry-run)"]
+        ProbeSub["probe/ (media & stream inspection)"]
     end
 
     subgraph Forensics ["crates/metaforge-forensics"]
@@ -137,19 +139,32 @@ flowchart TD
 
 ---
 
-## 🔄 3. Media Transcoding Engine (`metaforge-converter`)
+## 🔄 3. Media Transcoding & Batch Processing Engine (`metaforge-converter`)
 
-### Image Transcoding Architecture
-- Decodes image formats via pure Rust decoders into memory representations.
-- Protects against decompression bombs: rejects any input or target dimension $> 16,384 \times 16,384$ pixels or total allocations exceeding 256 megapixels.
-- Encodes output using native Rust encoders for JPEG (with quality parameter), PNG, WebP (lossless), BMP, TIFF, and GIF.
+The `metaforge-converter` crate enforces strict One-Job-Principle (OJP) separation across 5 dedicated internal subsystems:
 
-### Audio Transcoding Architecture
-- Decodes linear PCM WAV streams using pure Rust `hound`.
-- Channel Transformation:
-  - **Stereo ➔ Mono**: Computes arithmetic mean across channels: $M_i = \frac{L_i + R_i}{2}$.
-  - **Mono ➔ Stereo**: Duplicates sample to both output channels.
-- Resampling: Deterministic linear interpolation across sample frequencies (e.g. $44,100\text{ Hz} \leftrightarrow 48,000\text{ Hz}$ or downsampling to $22,050\text{ Hz}$).
+### 1. Pure Digital Signal Processing (`dsp/`)
+- **Resampling**: Deterministic linear interpolation across arbitrary sample frequencies (e.g. $48,000\text{ Hz} \leftrightarrow 44,100\text{ Hz} \leftrightarrow 16,000\text{ Hz}$).
+- **Channel Matrixing**: Downmixing (multi-channel to stereo/mono with $M_i = \frac{\sum C_{i}}{N}$ normalization to prevent clipping) and upmixing (mono to stereo).
+- **Gain & Normalization**: Linear gain scaling and peak normalization with soft clamping to $[-1.0, 1.0]$. Zero I/O dependencies.
+
+### 2. Universal Codecs & Demuxers (`codecs/`)
+- **Universal Container Demuxing (Symphonia)**: Pure-Rust decoding of audio from video containers (MP4, MKV, WebM, MOV) and audio containers (MP3, FLAC, OGG/Vorbis, AAC, WAV, AIFF, CAF). Zero C/FFI runtime dependencies.
+- **Audio Encoding (Hound)**: High-precision 16-bit signed integer or 32-bit float linear PCM WAV output.
+- **Image Codecs (`image`)**: Cross-format conversion (JPEG, PNG, WebP, GIF, BMP, TIFF) with Lanczos3 resampling and strict allocation bomb defenses ($\le 16,384 \times 16,384\text{ px}$, $\le 256\text{ MP}$).
+
+### 3. Chainable Pipelines (`pipeline/`)
+- `AudioPipeline`: Fluent builder for audio processing: `.sample_rate(hz).channels(ch).gain(g).normalize(bool).process_file(...)`.
+- `ImagePipeline`: Fluent builder for image transcoding: `.target(fmt).quality(q).resize(w, h).process_file(...)`.
+- Full UNIX pipe and stdio streaming (`metaforge convert - - -t webp`, `convert_stream`).
+
+### 4. Concurrent Batch Engine (`batch/`)
+- **Recursive Tree Mirroring**: Traverses directory hierarchies, preserving relative paths or optionally flattening.
+- **Workstation Concurrency Guardrail**: Thread pool strictly clamped to $\le 4$ workers per ecosystem invariant (`jobs = 4`).
+- **Pre-Flight Dry Run (`--dry-run`)**: Scans candidate files, calculates input sizes, and plans output operations without touching the filesystem.
+
+### 5. Media Stream Inspector (`probe/`)
+- Container and stream introspection reporting dimensions, audio/video track counts, codecs, duration, channels, and sample rates.
 
 ---
 

@@ -59,7 +59,7 @@ metaforge probe recording.wav
 ---
 
 ### C. Media & Image Transcoding (`convert`)
-Converts images and audio containers with zero C/FFI dependencies:
+Converts images, extracts audio from video containers, and transcodes audio formats with zero C/FFI dependencies:
 
 ```bash
 # Convert JPEG to PNG:
@@ -68,8 +68,37 @@ metaforge convert input.jpg output.png
 # Convert and resize image to WebP with custom quality:
 metaforge convert photo.jpg web_optimized.webp --quality 80 --resize 1280x720
 
-# Transcode WAV audio: downmix to Mono and resample to 44.1 kHz:
-metaforge convert stereo_in.wav mono_out.wav --channels 1 --rate 44100
+# Extract audio from MP4 video container to WAV:
+metaforge convert interview.mp4 audio.wav
+
+# Transcode audio (FLAC/MP3/OGG/WAV): downmix to Mono, resample to 16 kHz with peak normalization:
+metaforge convert input.flac speech.wav --channels 1 --rate 16000 --normalize
+
+# Pre-flight dry run estimation:
+metaforge convert raw_photo.tiff banner.webp --dry-run
+
+# UNIX Stdio stream piping (stdin to stdout):
+cat input.mp4 | metaforge convert - - -t wav > output.wav
+cat photo.png | metaforge convert - - -t webp > photo.webp
+```
+
+---
+
+### D. Concurrent Batch Transcoding (`batch`)
+Recursively converts entire directory trees while strictly adhering to the 4-worker concurrency cap:
+
+```bash
+# Batch transcode all JPEGs in a folder to WebP (preserves directory hierarchy):
+metaforge batch /path/to/photos /path/to/optimized --ext jpg,jpeg --target webp
+
+# Batch extract audio from all video files to WAV:
+metaforge batch /path/to/recordings /path/to/audio --ext mp4,mkv,webm --target wav
+
+# Pre-flight batch dry run (calculates files and bytes without modifying filesystem):
+metaforge batch /data/images /data/export --target png --dry-run
+
+# Flatten output directory tree (all files written directly into target dir):
+metaforge batch /nested/library /flat/export --ext flac --target wav --flatten
 ```
 
 ---

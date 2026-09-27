@@ -3,13 +3,14 @@ mod export;
 mod table;
 
 use args::{
-    AuditArgs, Cli, Commands, CommentArgs, ConvertArgs, DumpArgs, OutputFormat, ProbeArgs,
-    SanitizeArgs, ScanArgs,
+    AuditArgs, BatchArgs, Cli, Commands, CommentArgs, ConvertArgs, DumpArgs, OutputFormat,
+    ProbeArgs, SanitizeArgs, ScanArgs,
 };
 use clap::Parser;
 use metaforge_converter::{
-    convert_audio_file, convert_image_file, detect_target_format_from_path, probe_media_file,
-    AudioConvertOptions, ImageConvertOptions, ImageTargetFormat,
+    convert_media_file, convert_stream, detect_target_format_from_path, execute_batch_convert,
+    probe_media_file, AudioConvertOptions, BatchConvertOptions, ConvertReport, ImageConvertOptions,
+    ImageTargetFormat,
 };
 use metaforge_core::{ContainerType, MetadataEntry, MetaForgeError, TagCategory};
 use metaforge_forensics::{calculate_shannon_entropy, detect_overlay, scan_embedded_payloads};
@@ -52,6 +53,7 @@ fn main() -> ExitCode {
         Some(Commands::Comment(args)) => execute_comment(&args),
         Some(Commands::Dump(args)) => execute_dump(&args),
         Some(Commands::Convert(args)) => execute_convert(&args, cli.format),
+        Some(Commands::Batch(args)) => execute_batch(&args, cli.format),
         Some(Commands::Probe(args)) => execute_probe(&args, cli.format),
         None => {
             if let Some(file) = cli.file {
@@ -520,56 +522,11 @@ fn execute_dump(args: &DumpArgs) -> Result<(), MetaForgeError> {
     Ok(())
 }
 
-fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaForgeError> {
-    let inp = &args.input;
-    let outp = &args.output;
-
-    // Check if audio (e.g. .wav)
-    let in_ext = inp.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    let out_ext = outp.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-
-    let report = if in_ext == "wav" && out_ext == "wav" {
-        let audio_opts = AudioConvertOptions {
-            target_sample_rate: args.rate,
-            target_channels: args.channels,
-            target_bits_per_sample: None,
-        };
-        convert_audio_file(inp, outp, &audio_opts)?
-    } else {
-        // Image transcoding
-        let target_fmt = detect_target_format_from_path(outp).unwrap_or(ImageTargetFormat::Png);
-        let resize = if let Some(ref r) = args.resize {
-            let parts: Vec<&str> = r.split('x').collect();
-            if parts.len() == 2 {
-                let w: u32 = parts[0].trim().parse().map_err(|_| MetaForgeError::ConversionError {
-                    detail: format!("Invalid resize width: '{}'", parts[0]),
-                })?;
-                let h: u32 = parts[1].trim().parse().map_err(|_| MetaForgeError::ConversionError {
-                    detail: format!("Invalid resize height: '{}'", parts[1]),
-                })?;
-                Some((w, h))
-            } else {
-                return Err(MetaForgeError::ConversionError {
-                    detail: format!("Invalid resize format '{}'. Expected WxH (e.g. 800x600)", r),
-                });
-            }
-        } else {
-            None
-        };
-
-        let img_opts = ImageConvertOptions {
-            target_format: target_fmt,
-            quality: Some(args.quality),
-            resize,
-            preserve_metadata: true,
-            max_dimension: 16384,
-        };
-        convert_image_file(inp, outp, &img_opts)?
-    };
-
+fn print_convert_report(report: &ConvertReport, format: OutputFormat) -> Result<(), MetaForgeError> {
     match format {
         OutputFormat::Json | OutputFormat::Jsonl => {
-            let json = serde_json::to_string_pretty(&report).map_err(|e| MetaForgeError::Io(std::io::Error::other(e.to_string())))?;
+            let json = serde_json::to_string_pretty(report)
+                .map_err(|e| MetaForgeError::Io(std::io::Error::other(e.to_string())))?;
             println!("{}", json);
         }
         _ => {
@@ -577,8 +534,14 @@ fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaF
             let mut t = comfy_table::Table::new();
             t.load_preset(comfy_table::presets::UTF8_FULL);
             t.set_header(vec!["Property", "Value"]);
-            t.add_row(vec!["Input Size", &format!("{} bytes ({:.2} KB)", report.input_bytes, report.input_bytes as f64 / 1024.0)]);
-            t.add_row(vec!["Output Size", &format!("{} bytes ({:.2} KB)", report.output_bytes, report.output_bytes as f64 / 1024.0)]);
+            t.add_row(vec![
+                "Input Size",
+                &format!("{} bytes ({:.2} KB)", report.input_bytes, report.input_bytes as f64 / 1024.0),
+            ]);
+            t.add_row(vec![
+                "Output Size",
+                &format!("{} bytes ({:.2} KB)", report.output_bytes, report.output_bytes as f64 / 1024.0),
+            ]);
             t.add_row(vec!["Target Format", &report.output_format]);
             t.add_row(vec!["Details", &report.details]);
             println!("{t}\n");
@@ -587,12 +550,258 @@ fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaF
     Ok(())
 }
 
+fn execute_convert(args: &ConvertArgs, format: OutputFormat) -> Result<(), MetaForgeError> {
+    let is_stdin = args.input.as_os_str() == "-";
+    let is_stdout = args.output.as_os_str() == "-";
+
+    let audio_opts = AudioConvertOptions {
+        target_sample_rate: args.rate,
+        target_channels: args.channels,
+        target_bits_per_sample: None,
+        gain: args.gain,
+        normalize: args.normalize,
+    };
+
+    let target_img_fmt = if let Some(ref f) = args.target {
+        ImageTargetFormat::from_extension(f).unwrap_or(ImageTargetFormat::Png)
+    } else {
+        detect_target_format_from_path(&args.output).unwrap_or(ImageTargetFormat::Png)
+    };
+
+    let resize = if let Some(ref r) = args.resize {
+        let parts: Vec<&str> = r.split('x').collect();
+        if parts.len() == 2 {
+            let w: u32 = parts[0].trim().parse().map_err(|_| MetaForgeError::ConversionError {
+                detail: format!("Invalid resize width: '{}'", parts[0]),
+            })?;
+            let h: u32 = parts[1].trim().parse().map_err(|_| MetaForgeError::ConversionError {
+                detail: format!("Invalid resize height: '{}'", parts[1]),
+            })?;
+            Some((w, h))
+        } else {
+            return Err(MetaForgeError::ConversionError {
+                detail: format!("Invalid resize format '{}'. Expected WxH (e.g. 800x600)", r),
+            });
+        }
+    } else {
+        None
+    };
+
+    let img_opts = ImageConvertOptions {
+        target_format: target_img_fmt,
+        quality: Some(args.quality),
+        resize,
+        preserve_metadata: true,
+        max_dimension: 16384,
+    };
+
+    // Stdio streaming pipe support
+    if is_stdin || is_stdout {
+        let target_fmt_str = if let Some(ref f) = args.target {
+            f.clone()
+        } else if !is_stdout {
+            args.output
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("wav")
+                .to_string()
+        } else {
+            return Err(MetaForgeError::ConversionError {
+                detail: "Explicit --target (e.g. -t wav, -t webp) is required when streaming to stdout '-'".to_string(),
+            });
+        };
+
+        let in_hint = if !is_stdin {
+            args.input.extension().and_then(|s| s.to_str())
+        } else {
+            None
+        };
+
+        if args.dry_run {
+            println!(
+                "🔍 Dry-run: Streaming transcode from {} to {} planned (format: {})",
+                if is_stdin { "<stdin>" } else { args.input.to_str().unwrap_or("input") },
+                if is_stdout { "<stdout>" } else { args.output.to_str().unwrap_or("output") },
+                target_fmt_str
+            );
+            return Ok(());
+        }
+
+        let report = if is_stdin && is_stdout {
+            convert_stream(
+                std::io::stdin().lock(),
+                std::io::stdout().lock(),
+                in_hint,
+                &target_fmt_str,
+                &img_opts,
+                &audio_opts,
+            )?
+        } else if is_stdin {
+            let out_file = std::fs::File::create(&args.output)?;
+            convert_stream(
+                std::io::stdin().lock(),
+                out_file,
+                in_hint,
+                &target_fmt_str,
+                &img_opts,
+                &audio_opts,
+            )?
+        } else {
+            let in_file = std::fs::File::open(&args.input)?;
+            convert_stream(
+                in_file,
+                std::io::stdout().lock(),
+                in_hint,
+                &target_fmt_str,
+                &img_opts,
+                &audio_opts,
+            )?
+        };
+
+        if !is_stdout {
+            print_convert_report(&report, format)?;
+        }
+        return Ok(());
+    }
+
+    if args.dry_run {
+        let in_meta = fs::metadata(&args.input)?;
+        println!("\n🔍 Dry-run: Conversion Pre-Flight Estimation");
+        println!("  Input Path:   {}", args.input.display());
+        println!("  Output Path:  {}", args.output.display());
+        println!(
+            "  Input Size:   {} bytes ({:.2} KB)",
+            in_meta.len(),
+            in_meta.len() as f64 / 1024.0
+        );
+        println!("  Target Fmt:   {}", target_img_fmt.to_extension());
+        println!("  Operation:    Transcode to target container format\n");
+        return Ok(());
+    }
+
+    let report = convert_media_file(&args.input, &args.output, &img_opts, &audio_opts)?;
+    print_convert_report(&report, format)?;
+    Ok(())
+}
+
+fn execute_batch(args: &BatchArgs, format: OutputFormat) -> Result<(), MetaForgeError> {
+    let extensions: Vec<String> = if let Some(ref e) = args.ext {
+        e.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let resize = if let Some(ref r) = args.resize {
+        let parts: Vec<&str> = r.split('x').collect();
+        if parts.len() == 2 {
+            let w: u32 = parts[0].trim().parse().map_err(|_| MetaForgeError::ConversionError {
+                detail: format!("Invalid resize width: '{}'", parts[0]),
+            })?;
+            let h: u32 = parts[1].trim().parse().map_err(|_| MetaForgeError::ConversionError {
+                detail: format!("Invalid resize height: '{}'", parts[1]),
+            })?;
+            Some((w, h))
+        } else {
+            return Err(MetaForgeError::ConversionError {
+                detail: format!("Invalid resize format '{}'. Expected WxH", r),
+            });
+        }
+    } else {
+        None
+    };
+
+    let target_img_fmt = args
+        .target
+        .as_deref()
+        .and_then(ImageTargetFormat::from_extension)
+        .unwrap_or(ImageTargetFormat::Png);
+
+    let batch_opts = BatchConvertOptions {
+        input_dir: args.input.clone(),
+        output_dir: args.output.clone(),
+        extensions,
+        target_format: args.target.clone().unwrap_or_default(),
+        max_workers: args.workers,
+        dry_run: args.dry_run,
+        flatten: args.flatten,
+        image_options: ImageConvertOptions {
+            target_format: target_img_fmt,
+            quality: Some(args.quality),
+            resize,
+            preserve_metadata: true,
+            max_dimension: 16384,
+        },
+        audio_options: AudioConvertOptions {
+            target_sample_rate: args.rate,
+            target_channels: args.channels,
+            target_bits_per_sample: None,
+            gain: args.gain,
+            normalize: args.normalize,
+        },
+    };
+
+    let report = execute_batch_convert(&batch_opts)?;
+
+    match format {
+        OutputFormat::Json | OutputFormat::Jsonl => {
+            let json = serde_json::to_string_pretty(&report)
+                .map_err(|e| MetaForgeError::Io(std::io::Error::other(e.to_string())))?;
+            println!("{}", json);
+        }
+        _ => {
+            let title = if report.dry_run {
+                "🔍 Batch Conversion Pre-Flight Plan (Dry Run)"
+            } else {
+                "🚀 Batch Conversion Completed"
+            };
+            println!("\n{}", title);
+            let mut t = comfy_table::Table::new();
+            t.load_preset(comfy_table::presets::UTF8_FULL);
+            t.set_header(vec!["Batch Metric", "Value"]);
+            t.add_row(vec!["Total Scanned", &report.total_scanned.to_string()]);
+            t.add_row(vec!["Converted", &report.converted.to_string()]);
+            t.add_row(vec!["Skipped", &report.skipped.to_string()]);
+            t.add_row(vec!["Failed", &report.failed.to_string()]);
+            t.add_row(vec![
+                "Total Input Data",
+                &format!(
+                    "{} bytes ({:.2} MB)",
+                    report.total_input_bytes,
+                    report.total_input_bytes as f64 / 1_048_576.0
+                ),
+            ]);
+            if !report.dry_run {
+                t.add_row(vec![
+                    "Total Output Data",
+                    &format!(
+                        "{} bytes ({:.2} MB)",
+                        report.total_output_bytes,
+                        report.total_output_bytes as f64 / 1_048_576.0
+                    ),
+                ]);
+            }
+            t.add_row(vec!["Elapsed Time", &format!("{} ms", report.elapsed_ms)]);
+            println!("{t}\n");
+
+            if report.failed > 0 {
+                eprintln!("⚠️ Warning: {} items failed to convert.", report.failed);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn execute_probe(args: &ProbeArgs, format: OutputFormat) -> Result<(), MetaForgeError> {
     let probe = probe_media_file(&args.file)?;
 
     match format {
         OutputFormat::Json | OutputFormat::Jsonl => {
-            let json = serde_json::to_string_pretty(&probe).map_err(|e| MetaForgeError::Io(std::io::Error::other(e.to_string())))?;
+            let json = serde_json::to_string_pretty(&probe)
+                .map_err(|e| MetaForgeError::Io(std::io::Error::other(e.to_string())))?;
             println!("{}", json);
         }
         _ => {
@@ -602,18 +811,40 @@ fn execute_probe(args: &ProbeArgs, format: OutputFormat) -> Result<(), MetaForge
             t.set_header(vec!["Stream Property", "Value"]);
             t.add_row(vec!["Media Kind", &probe.media_kind]);
             t.add_row(vec!["Format / Container", &probe.format]);
-            t.add_row(vec!["File Size", &format!("{} bytes ({:.2} KB)", probe.size_bytes, probe.size_bytes as f64 / 1024.0)]);
+            t.add_row(vec![
+                "File Size",
+                &format!(
+                    "{} bytes ({:.2} KB)",
+                    probe.size_bytes,
+                    probe.size_bytes as f64 / 1024.0
+                ),
+            ]);
             if let Some((w, h)) = probe.dimensions {
                 t.add_row(vec!["Dimensions", &format!("{} x {} px", w, h)]);
             }
             if let Some(dur) = probe.duration_seconds {
                 t.add_row(vec!["Duration", &format!("{:.3} s", dur)]);
             }
+            if probe.audio_tracks > 0 {
+                t.add_row(vec!["Audio Tracks", &probe.audio_tracks.to_string()]);
+            }
+            if probe.video_tracks > 0 {
+                t.add_row(vec!["Video Tracks", &probe.video_tracks.to_string()]);
+            }
+            if let Some(codec) = probe.codec_name {
+                t.add_row(vec!["Codec Name", &codec]);
+            }
             if let Some(rate) = probe.sample_rate {
                 t.add_row(vec!["Sample Rate", &format!("{} Hz", rate)]);
             }
             if let Some(ch) = probe.channels {
-                let desc = if ch == 1 { "Mono (1 channel)" } else if ch == 2 { "Stereo (2 channels)" } else { "Multi-Channel" };
+                let desc = if ch == 1 {
+                    "Mono (1 channel)"
+                } else if ch == 2 {
+                    "Stereo (2 channels)"
+                } else {
+                    "Multi-Channel"
+                };
                 t.add_row(vec!["Channels", desc]);
             }
             if let Some(bits) = probe.bits_per_sample {

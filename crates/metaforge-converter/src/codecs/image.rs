@@ -1,3 +1,8 @@
+//! Sovereign Pure-Rust Image Codec & Rescaler Engine
+//!
+//! Provides cross-format image decoding, Lanczos3 high-fidelity resizing,
+//! and encoding with strict decompression bomb thresholds.
+
 use crate::types::{ImageConvertOptions, ImageTargetFormat};
 use image::{
     codecs::{
@@ -60,7 +65,6 @@ pub fn transcode_image_bytes(input: &[u8], options: &ImageConvertOptions) -> Res
         ImageTargetFormat::Jpeg => {
             let quality = options.quality.unwrap_or(85).clamp(1, 100);
             let encoder = JpegEncoder::new_with_quality(&mut cursor, quality);
-            // JPEG cannot encode RGBA directly; convert to RGB8 if needed
             let rgb_img = processed.to_rgb8();
             encoder
                 .write_image(rgb_img.as_raw(), out_w, out_h, ColorType::Rgb8.into())
@@ -92,7 +96,6 @@ pub fn transcode_image_bytes(input: &[u8], options: &ImageConvertOptions) -> Res
         }
         ImageTargetFormat::Gif => {
             let mut encoder = GifEncoder::new(&mut cursor);
-            // GIF expects Rgba8
             let rgba_img = processed.to_rgba8();
             encoder
                 .encode(rgba_img.as_raw(), out_w, out_h, ColorType::Rgba8.into())

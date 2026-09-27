@@ -33,12 +33,14 @@ graph TD
     *   **WebP**: RIFF container parsing, Extended Headers (`VP8X`), and `EXIF`/`XMP` metadata.
     *   **GIF**: Logical Screen Descriptor, Comment Extensions (`0xFE`), and XMP Application Extensions (`0xFF`).
     *   **HEIC**: ISOBMFF Box parsing, Spatial Extents (`ispe`), item location extents, and TIFF EXIF decoding.
-    *   **WAV Audio**: Linear PCM RIFF containers, stream probing, channel upmixing/downmixing, and sample resampling.
+    *   **Audio & Video Media Containers**: Pure-Rust demuxing and decoding of MP4, MKV, WebM, MP3, FLAC, OGG/Vorbis, AAC, and WAV containers.
 *   **🔄 Zero-Dependency Media & Image Transcoding (`metaforge-converter`)**:
+    *   **Universal Audio Extraction**: Extract pristine linear PCM audio from video containers (MP4, MKV, WebM, MOV) and transcode audio formats (FLAC, MP3, OGG -> WAV) with zero C/FFI dependencies.
     *   **Cross-Format Image Transcoding**: Convert seamlessly across JPEG, PNG, WebP, GIF, BMP, and TIFF.
-    *   **Quality & Resize Controls**: Adjustable compression quality (`--quality 1-100`) and arbitrary dimension scaling (`--resize WxH`).
-    *   **WAV Audio Transcoding**: Pure Rust sample-rate resampling and channel mixing (stereo-to-mono downmixing, mono-to-stereo upmixing).
-    *   **Stream Telemetry Probing**: Inspect container kind, dimensions, sample rates, channels, and bit depths (`metaforge probe`).
+    *   **Chainable Audio DSP**: Arbitrary linear resampling ($16\text{ kHz}, 44.1\text{ kHz}, 48\text{ kHz}$), channel downmixing/upmixing, linear gain amplification, and peak normalization.
+    *   **Concurrent Batch Transcoding**: Recursive directory batch conversion with relative tree preservation, extension filtering, dry-run planning, and strict 4-worker concurrency guardrails (`metaforge batch`).
+    *   **UNIX Stream Piping**: Full stdin/stdout streaming support (`cat video.mp4 | metaforge convert - - -t wav > out.wav`).
+    *   **Stream Telemetry Probing**: Inspect container format, track counts, dimensions, sample rates, channels, and bit depths (`metaforge probe`).
 *   **🔍 Forensic Signature Scanner**: Walk-scans files beyond the logical end-of-file (EOF) offset to flag overlays, trailing payloads, or embedded assets (e.g., hidden ZIP archives, PDF docs, PE/ELF executables, PHP shells, or scripting blocks).
 *   **🛡️ Tier 6 Adversarial Self-Attack Immunity (`POC TDD+++++`)**:
     *   **Formula & Code Injection Defense**: Automatically neutralizes spreadsheet injection attack vectors (`=`, `+`, `-`, `@`, `\t`, `\r`) in CSV exports by prefixing single-quotes (`'`).
