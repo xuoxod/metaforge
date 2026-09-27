@@ -142,6 +142,12 @@ package_dist() {
     [ ! -f "$musl_bin" ] && musl_bin="target/x86_64-unknown-linux-musl/release/jpeg_meta_rs"
 
     if [ -f "$musl_bin" ]; then
+        local standalone="dist/metaforge-${version}-linux-x86_64"
+        cp -f "$musl_bin" "$standalone"
+        chmod +x "$standalone"
+        (cd dist && sha256sum "$(basename "$standalone")" > "$(basename "$standalone").sha256")
+        ui_success "Created: $standalone ($(du -h "$standalone" | cut -f1))"
+
         local tarball="dist/metaforge-${version}-x86_64-unknown-linux-musl.tar.gz"
         local files=("$(basename "$musl_bin")")
         local bin_dir
@@ -151,7 +157,24 @@ package_dist() {
         tar -czf "$tarball" -C "$bin_dir" "${files[@]}"
         (cd dist && sha256sum "$(basename "$tarball")" > "$(basename "$tarball").sha256")
         ui_success "Created: $tarball ($(du -h "$tarball" | cut -f1))"
-        ui_kv "SHA-256" "$(cat "${tarball}.sha256" | cut -d' ' -f1)"
+
+        # Generate unified SHA256SUMS manifest
+        (cd dist && sha256sum "$(basename "$standalone")" "$(basename "$tarball")" > SHA256SUMS)
+        ui_success "Generated: dist/SHA256SUMS"
+
+        # GPG Cryptographic Signing
+        if command -v gpg >/dev/null 2>&1; then
+            local signing_key
+            signing_key="$(gpg --list-secret-keys --keyid-format LONG 2>/dev/null | grep -E "sec" | head -n1 | awk '{print $2}' | cut -d'/' -f2 || true)"
+            if [ -n "$signing_key" ]; then
+                ui_info "Signing release artifacts with Sovereign GPG Key: $signing_key"
+                (cd dist && \
+                    gpg --batch --yes --armor --detach-sign "$(basename "$standalone")" && \
+                    gpg --batch --yes --armor --detach-sign "$(basename "$tarball")" && \
+                    gpg --batch --yes --armor --detach-sign SHA256SUMS)
+                ui_pass "Cryptographic OpenPGP signatures generated (.asc)"
+            fi
+        fi
     fi
 }
 
